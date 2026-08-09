@@ -1,0 +1,16 @@
+export type IconName =
+  | 'arrow'
+  | 'basis'
+  | 'book'
+  | 'check'
+  | 'code'
+  | 'eye'
+  | 'eye-off'
+  | 'grid'
+  | 'lock'
+  | 'moon'
+  | 'plus'
+  | 'refresh'
+  | 'sun'
+  | 'unlock'
+  | 'x';
