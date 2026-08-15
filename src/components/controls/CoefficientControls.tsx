@@ -1,21 +1,59 @@
-import { formatNumber, formatVector, linearCombination, type Vector2 } from '../../math';
+import { useEffect, useRef, useState } from 'react';
+import { formatEquationTerm, formatNumber, formatVector, type LinearCombinationEvaluation } from '../../math';
 import { Icon } from '../Icon';
 
 interface CoefficientControlsProps {
-  vectors: Vector2[];
   coefficients: { a: number; b: number };
+  evaluation: LinearCombinationEvaluation | null;
   enabled: boolean;
-  result: Vector2;
   onToggle: () => void;
   onChange: (key: 'a' | 'b', value: number) => void;
 }
 
-export function CoefficientControls({ vectors, coefficients, enabled, result, onToggle, onChange }: CoefficientControlsProps) {
-  const hasPair = vectors.length >= 2;
-  const computedResult = hasPair ? linearCombination(vectors.slice(0, 2), [coefficients.a, coefficients.b]) : result;
-  const update = (key: 'a' | 'b', raw: string) => {
+type CoefficientKey = 'a' | 'b';
+type Drafts = Record<CoefficientKey, string>;
+
+function expressionFor(coefficients: { a: number; b: number }): string {
+  return `w = ${formatEquationTerm(coefficients.a, 'u₁', true)} ${formatEquationTerm(coefficients.b, 'u₂')}`;
+}
+
+function scaledExpression(coefficient: number, symbol: string): string {
+  const magnitudeText = Math.abs(coefficient) === 1 ? '' : formatNumber(Math.abs(coefficient));
+  return `${coefficient < 0 ? '−' : ''}${magnitudeText}${symbol}`;
+}
+
+export function CoefficientControls({ coefficients, evaluation, enabled, onToggle, onChange }: CoefficientControlsProps) {
+  const hasPair = evaluation !== null;
+  const activeCoefficients = evaluation?.coefficients ?? coefficients;
+  const [drafts, setDrafts] = useState<Drafts>(() => ({ a: formatNumber(coefficients.a), b: formatNumber(coefficients.b) }));
+  const focusedFieldRef = useRef<CoefficientKey | null>(null);
+
+  useEffect(() => {
+    setDrafts((current) => ({
+      a: focusedFieldRef.current === 'a' ? current.a : formatNumber(activeCoefficients.a),
+      b: focusedFieldRef.current === 'b' ? current.b : formatNumber(activeCoefficients.b),
+    }));
+  }, [activeCoefficients]);
+
+  const update = (key: CoefficientKey, raw: string) => {
+    setDrafts((current) => ({ ...current, [key]: raw }));
+    if (raw.trim() === '') return;
     const value = Number(raw);
     if (Number.isFinite(value)) onChange(key, value);
+  };
+
+  const commit = (key: CoefficientKey) => {
+    const raw = drafts[key];
+    const value = Number(raw);
+    if (raw.trim() === '' || !Number.isFinite(value)) {
+      setDrafts((current) => ({ ...current, [key]: formatNumber(activeCoefficients[key]) }));
+      focusedFieldRef.current = null;
+      return;
+    }
+    const committed = Math.max(-5, Math.min(5, value));
+    if (committed !== value) onChange(key, committed);
+    setDrafts((current) => ({ ...current, [key]: formatNumber(committed) }));
+    focusedFieldRef.current = null;
   };
 
   return <section className={`control-section combination-section ${enabled ? 'is-open' : ''}`} aria-labelledby="combination-heading">
@@ -30,18 +68,19 @@ export function CoefficientControls({ vectors, coefficients, enabled, result, on
     </div>
     {!hasPair && <p className="muted-copy">Add a second vector to combine two directions.</p>}
     {hasPair && <>
-      <div className="formula-display" aria-label="w equals a times u1 plus b times u2"><span>w</span> = <em>a</em>u₁ + <em>b</em>u₂</div>
+      <div className="formula-display" aria-label={expressionFor(activeCoefficients)}><span>w</span> = <em>a</em>u₁ + <em>b</em>u₂</div>
       <div className="coefficient-grid">
         {(['a', 'b'] as const).map((key, index) => <label className="coefficient-control" key={key}>
-          <div className="coefficient-label"><span className={`coefficient-dot coefficient-dot-${index}`} /> <strong>{key}</strong><output>{formatNumber(coefficients[key])}</output></div>
-          <input aria-label={`Coefficient ${key}`} type="range" min="-3" max="3" step="0.1" value={coefficients[key]} onChange={(event) => update(key, event.target.value)} />
-          <input className="coefficient-number" aria-label={`${key} exact value`} type="number" min="-5" max="5" step="0.1" value={coefficients[key]} onChange={(event) => update(key, event.target.value)} />
+          <div className="coefficient-label"><span className={`coefficient-dot coefficient-dot-${index}`} /> <strong>{key}</strong><output>{formatNumber(activeCoefficients[key])}</output></div>
+          <input aria-label={`Coefficient ${key}`} type="range" min="-5" max="5" step="0.1" value={activeCoefficients[key]} onChange={(event) => onChange(key, Number(event.target.value))} />
+          <input className="coefficient-number" aria-label={`${key} exact value`} type="number" min="-5" max="5" step="0.1" value={drafts[key]} onFocus={() => { focusedFieldRef.current = key; }} onChange={(event) => update(key, event.target.value)} onBlur={() => commit(key)} />
         </label>)}
       </div>
-      {enabled && <div className="combination-calculation">
-        <div className="calculation-line"><span className="calculation-key">Scaled</span><span>{formatNumber(coefficients.a)}u₁ = {formatVector({ x: vectors[0]!.x * coefficients.a, y: vectors[0]!.y * coefficients.a })}</span></div>
-        <div className="calculation-line"><span className="calculation-key">Scaled</span><span>{formatNumber(coefficients.b)}u₂ = {formatVector({ x: vectors[1]!.x * coefficients.b, y: vectors[1]!.y * coefficients.b })}</span></div>
-        <div className="calculation-line result-line"><span className="calculation-key">Result w</span><strong>{formatVector(computedResult)}</strong></div>
+      {enabled && evaluation && <div className="combination-calculation" aria-live="polite">
+        <div className="combination-equation"><span>w</span> = {expressionFor(activeCoefficients).replace('w = ', '')} = {formatVector(evaluation.result)}</div>
+        <div className="calculation-line"><span className="calculation-key">Scaled</span><span>{scaledExpression(activeCoefficients.a, 'u₁')} = {formatVector(evaluation.firstScaled)}</span></div>
+        <div className="calculation-line"><span className="calculation-key">Scaled</span><span>{scaledExpression(activeCoefficients.b, 'u₂')} = {formatVector(evaluation.secondScaled)}</span></div>
+        <div className="calculation-line result-line"><span className="calculation-key">Result w</span><strong>{formatVector(evaluation.result)}</strong></div>
       </div>}
       {!enabled && <button className="text-action" type="button" onClick={onToggle}><Icon name="arrow" size={14} /> Reveal the construction</button>}
     </>}

@@ -1,7 +1,7 @@
 import { memo, useMemo, useRef } from 'react';
 import { formatNumber } from '../../math';
-import { add, magnitude, normalize, scale } from '../../math';
-import type { Vector2, VectorSetAnalysis } from '../../math';
+import { magnitude, normalize, scale } from '../../math';
+import type { LinearCombinationEvaluation, Vector2, VectorSetAnalysis } from '../../math';
 
 export interface PlaneVector {
   id: string;
@@ -14,8 +14,7 @@ export interface PlaneVector {
 
 export interface CombinationOverlay {
   enabled: boolean;
-  coefficients: { a: number; b: number };
-  result: Vector2;
+  evaluation: LinearCombinationEvaluation;
 }
 
 interface VectorPlaneProps {
@@ -87,29 +86,82 @@ function StandardBasisOverlay() {
   </g>;
 }
 
-function CombinationGeometry({ combination, firstVector, secondVector }: {
-  combination: CombinationOverlay;
-  firstVector: Vector2;
-  secondVector: Vector2;
+const COMBINATION_PADDING = 28;
+
+function isOutsidePlane(point: { x: number; y: number }): boolean {
+  return point.x < COMBINATION_PADDING || point.x > WIDTH - COMBINATION_PADDING
+    || point.y < COMBINATION_PADDING || point.y > HEIGHT - COMBINATION_PADDING;
+}
+
+function clampScreenPoint(point: { x: number; y: number }): { x: number; y: number } {
+  return {
+    x: Math.max(COMBINATION_PADDING, Math.min(WIDTH - COMBINATION_PADDING, point.x)),
+    y: Math.max(COMBINATION_PADDING, Math.min(HEIGHT - COMBINATION_PADDING, point.y)),
+  };
+}
+
+function labelPosition(point: { x: number; y: number }, verticalOffset: number): { x: number; y: number; anchor: 'start' | 'end' } {
+  const nearRightEdge = point.x > WIDTH - 150;
+  return {
+    x: Math.max(COMBINATION_PADDING, Math.min(WIDTH - COMBINATION_PADDING, point.x + (nearRightEdge ? -12 : 12))),
+    y: Math.max(COMBINATION_PADDING, Math.min(HEIGHT - COMBINATION_PADDING, point.y + verticalOffset)),
+    anchor: nearRightEdge ? 'end' : 'start',
+  };
+}
+
+function scaledLabel(coefficient: number, symbol: string): string {
+  const magnitudeText = Math.abs(coefficient) === 1 ? '' : formatNumber(Math.abs(coefficient));
+  return `${coefficient < 0 ? '−' : ''}${magnitudeText}${symbol}`;
+}
+
+function CombinationArrow({
+  vector,
+  point,
+  className,
+  markerEnd,
+  label,
+  labelOffset,
+  labelClassName,
+}: {
+  vector: Vector2;
+  point: { x: number; y: number };
+  className: string;
+  markerEnd: string;
+  label: string;
+  labelOffset: number;
+  labelClassName?: string;
 }) {
-  const firstScaled = scale(firstVector, combination.coefficients.a);
-  const secondScaled = scale(secondVector, combination.coefficients.b);
-  const result = add(firstScaled, secondScaled);
+  const isZero = magnitude(vector) <= 1e-8;
+  const isClipped = isOutsidePlane(point);
+  const visiblePoint = clampScreenPoint(point);
+  const textPosition = labelPosition(visiblePoint, labelOffset);
+
+  return <g className={className}>
+    {isZero
+      ? <circle className="combination-zero-marker" cx={ORIGIN.x} cy={ORIGIN.y} r="5" />
+      : <line className={`combination-arrow-line${isClipped ? ' is-clipped' : ''}`} x1={ORIGIN.x} y1={ORIGIN.y} x2={visiblePoint.x} y2={visiblePoint.y} markerEnd={markerEnd} />}
+    {isClipped && <circle className="combination-overflow-marker" cx={visiblePoint.x} cy={visiblePoint.y} r="6" />}
+    <text className={`overlay-label ${labelClassName ?? ''}`} x={textPosition.x} y={textPosition.y} textAnchor={textPosition.anchor}>{label}</text>
+  </g>;
+}
+
+function CombinationGeometry({ combination }: { combination: CombinationOverlay }) {
+  const { firstScaled, secondScaled, result, coefficients } = combination.evaluation;
   const firstPoint = toScreen(firstScaled);
   const secondPoint = toScreen(secondScaled);
   const resultPoint = toScreen(result);
-  const coefficientA = formatNumber(combination.coefficients.a);
-  const coefficientB = formatNumber(combination.coefficients.b);
+  const hasBothComponents = magnitude(firstScaled) > 1e-8 && magnitude(secondScaled) > 1e-8;
+  const anyPointClipped = isOutsidePlane(firstPoint) || isOutsidePlane(secondPoint) || isOutsidePlane(resultPoint);
 
-  return <g className="combination-overlay" aria-label="Linear combination construction">
-    <line className="scaled-vector scaled-vector-a" x1={ORIGIN.x} y1={ORIGIN.y} x2={firstPoint.x} y2={firstPoint.y} markerEnd="url(#arrow-combination-a)" />
-    <line className="scaled-vector scaled-vector-b" x1={ORIGIN.x} y1={ORIGIN.y} x2={secondPoint.x} y2={secondPoint.y} markerEnd="url(#arrow-combination-b)" />
-    <line className="parallelogram-edge" x1={firstPoint.x} y1={firstPoint.y} x2={resultPoint.x} y2={resultPoint.y} />
-    <line className="parallelogram-edge" x1={secondPoint.x} y1={secondPoint.y} x2={resultPoint.x} y2={resultPoint.y} />
-    <line className="resultant-vector" x1={ORIGIN.x} y1={ORIGIN.y} x2={resultPoint.x} y2={resultPoint.y} markerEnd="url(#arrow-resultant)" />
-    <text className="overlay-label overlay-label-a" x={firstPoint.x + 10} y={firstPoint.y - 12}>a·u₁ = {coefficientA}u₁</text>
-    <text className="overlay-label overlay-label-b" x={secondPoint.x + 10} y={secondPoint.y + 22}>b·u₂ = {coefficientB}u₂</text>
-    <text className="resultant-label" x={resultPoint.x + 12} y={resultPoint.y - 12}>w</text>
+  return <g className="combination-overlay" role="group" aria-label="Linear combination construction">
+    <CombinationArrow vector={firstScaled} point={firstPoint} className="scaled-vector scaled-vector-a" markerEnd="url(#arrow-combination-a)" label={`a·u₁ = ${scaledLabel(coefficients.a, 'u₁')}`} labelOffset={-12} />
+    <CombinationArrow vector={secondScaled} point={secondPoint} className="scaled-vector scaled-vector-b" markerEnd="url(#arrow-combination-b)" label={`b·u₂ = ${scaledLabel(coefficients.b, 'u₂')}`} labelOffset={22} />
+    {hasBothComponents && <>
+      <line className="parallelogram-edge" x1={clampScreenPoint(firstPoint).x} y1={clampScreenPoint(firstPoint).y} x2={clampScreenPoint(resultPoint).x} y2={clampScreenPoint(resultPoint).y} />
+      <line className="parallelogram-edge" x1={clampScreenPoint(secondPoint).x} y1={clampScreenPoint(secondPoint).y} x2={clampScreenPoint(resultPoint).x} y2={clampScreenPoint(resultPoint).y} />
+    </>}
+    <CombinationArrow vector={result} point={resultPoint} className="resultant-vector" markerEnd="url(#arrow-resultant)" label="w" labelOffset={-12} labelClassName="resultant-label" />
+    {anyPointClipped && <g className="combination-overflow-note"><rect x={WIDTH - 155} y="31" width="127" height="22" rx="5" /><text x={WIDTH - 91} y="46" textAnchor="middle">some vectors outside view</text></g>}
   </g>;
 }
 
@@ -123,8 +175,6 @@ export const VectorPlane = memo(function VectorPlane({
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ id: string; pointerId: number } | null>(null);
   const visibleVectors = useMemo(() => vectors.filter((vector) => vector.visible), [vectors]);
-  const firstTwo = vectors.slice(0, 2);
-
   const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
     const drag = dragRef.current;
     if (!drag) return;
@@ -214,7 +264,7 @@ export const VectorPlane = memo(function VectorPlane({
           {[-5, -4, -3, -2, -1, 1, 2, 3, 4, 5].map((value) => { const point = toScreen({ x: value, y: 0 }); return <text key={`xt-${value}`} x={point.x} y={ORIGIN.y + 22} textAnchor="middle">{value}</text>; })}
           {[-4, -3, -2, -1, 1, 2, 3, 4].map((value) => { const point = toScreen({ x: 0, y: value }); return <text key={`yt-${value}`} x={ORIGIN.x - 13} y={point.y + 4} textAnchor="end">{value}</text>; })}
         </g>
-        {combination && combination.enabled && firstTwo.length === 2 && <CombinationGeometry combination={combination} firstVector={firstTwo[0]!.value} secondVector={firstTwo[1]!.value} />}
+        {combination?.enabled && <CombinationGeometry combination={combination} />}
         {visibleVectors.map((vector, index) => {
           const point = toScreen(vector.value);
           const color = vector.color || COLORS[index] || COLORS[0]!;

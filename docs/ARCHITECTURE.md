@@ -29,7 +29,7 @@ usePlaygroundState ── serializable vector + scene state
 - `vector.ts`: arithmetic, magnitude, normalization, dot product, determinant, scalar-multiple factor.
 - `numerical.ts`: finite checks, scale-aware approximate equality, clamp, tolerances.
 - `linear-independence.ts`: pair classification, rank in R², independence, dependence, scalar-multiple search.
-- `linear-combination.ts`: arbitrary finite combinations and a stable 2-vector solve.
+- `linear-combination.ts`: arbitrary finite combinations, a shared two-vector evaluation (`firstScaled`, `secondScaled`, `result`), and a stable 2-vector solve.
 - `span.ts`: rank-to-span interpretation (`zero`, `line`, `plane`).
 - `basis.ts`: basis checks and the two visible basis criteria.
 - `analysis.ts`: one coherent `VectorSetAnalysis` snapshot, including a concrete three-vector relation.
@@ -63,6 +63,8 @@ Rendering layers are ordered deliberately:
 4. optional linear-combination construction
 5. original vectors and accessible handles
 6. origin marker
+
+The combination construction consumes the same `LinearCombinationEvaluation` object as the control panel. Off-canvas component/result endpoints are clamped to the plane edge and explicitly marked rather than silently disappearing.
 
 SVG is appropriate for the current small scene and keeps labels, focus, and hit areas inspectable. A future R³ renderer can implement a parallel scene interface without changing the math or state model.
 

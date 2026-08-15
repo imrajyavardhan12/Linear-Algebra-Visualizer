@@ -43,3 +43,25 @@ test('combination controls reveal a resultant construction', async ({ page }) =>
   await expect(page.locator('.combination-calculation').getByText(/2u₁ =/)).toBeVisible();
 });
 
+test('shows the complete worked example for negative coefficients', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('switch', { name: 'Show linear combination' }).click();
+  await page.getByRole('spinbutton', { name: 'a exact value' }).fill('2');
+  await page.getByRole('spinbutton', { name: 'b exact value' }).fill('-1');
+
+  await expect(page.locator('.combination-equation')).toHaveText('w = 2u₁ − u₂ = (5, 0)');
+  await expect(page.locator('.combination-overlay')).toBeVisible();
+  await expect(page.getByText('Result w')).toBeVisible();
+});
+
+test('makes zero components explicit and signals off-canvas results', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('switch', { name: 'Show linear combination' }).click();
+  await page.getByRole('spinbutton', { name: 'a exact value' }).fill('0');
+  await expect(page.locator('.combination-zero-marker')).toHaveCount(1);
+
+  await page.getByRole('spinbutton', { name: 'a exact value' }).fill('5');
+  await page.getByRole('spinbutton', { name: 'b exact value' }).fill('5');
+  await expect(page.locator('.combination-overflow-note')).toBeVisible();
+});
+

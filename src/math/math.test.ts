@@ -5,6 +5,7 @@ import {
   basisChecks,
   determinant2D,
   dot,
+  evaluateLinearCombination,
   formsBasisOfR2,
   linearlyDependent,
   linearlyIndependent,
@@ -105,6 +106,30 @@ describe('dependence, span, and basis', () => {
 });
 
 describe('linear combinations', () => {
+  it('evaluates scaled components and the resultant from one shared calculation', () => {
+    const evaluation = evaluateLinearCombination(
+      { x: 2, y: 1 },
+      { x: -1, y: 2 },
+      { a: 2, b: -1 },
+    );
+
+    expect(evaluation.firstScaled).toEqual({ x: 4, y: 2 });
+    expect(evaluation.secondScaled).toEqual({ x: 1, y: -2 });
+    expect(evaluation.result).toEqual({ x: 5, y: 0 });
+  });
+
+  it('preserves zero and negative coefficient semantics', () => {
+    const evaluation = evaluateLinearCombination(
+      { x: 1, y: 2 },
+      { x: 3, y: -1 },
+      { a: 0, b: -0.5 },
+    );
+
+    expect(evaluation.firstScaled).toEqual({ x: 0, y: 0 });
+    expect(evaluation.secondScaled).toEqual({ x: -1.5, y: 0.5 });
+    expect(evaluation.result).toEqual({ x: -1.5, y: 0.5 });
+  });
+
   it('solves coefficients for a spanning pair', () => {
     expect(solveTwoVectorCombination({ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 3, y: -2 })).toEqual({ a: 3, b: -2 });
     expect(solveTwoVectorCombination({ x: 2, y: 1 }, { x: -1, y: 2 }, { x: 5, y: 0 })).toEqual({ a: 2, b: -1 });
