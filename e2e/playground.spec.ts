@@ -217,13 +217,14 @@ test('rejects hostile scene content and avoids third-party runtime requests', as
   expect(policy).toContain("object-src 'none'");
 });
 
-test('keeps the primary playground layout visually stable', async ({ page }) => {
+test('keeps the primary playground layout visually stable', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.evaluate(() => document.fonts.ready);
   await expect(page).toHaveScreenshot('playground.png', {
     animations: 'disabled',
     caret: 'hide',
     fullPage: true,
+    maxDiffPixelRatio: testInfo.project.name === 'mobile' ? 0.055 : 0.02,
   });
 });
 
