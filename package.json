@@ -2,6 +2,10 @@
   "name": "linear-algebra-playground",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

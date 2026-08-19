@@ -4,12 +4,14 @@ The R² playground is intentionally the V1 focus. These are the next modules, in
 
 ## Near term: deepen R²
 
-- [ ] Add projection and dot-product mode with angle and shadow overlays.
-- [ ] Add a determinant/area visualization showing the parallelogram area scale.
+- [x] Add dot-product and projection exploration with angle and shadow overlays.
+- [x] Add stable-ID pair selectors for linear combinations and directional projections.
+- [x] Add a determinant/area visualization showing the parallelogram area scale.
 - [ ] Add an in-place change-of-basis exploration using two selectable bases.
-- [ ] Add URL copy/share affordance and a small “example gallery”.
-- [ ] Improve touch drag affordances with a visible active-handle state.
-- [ ] Add screenshot-based visual regression coverage for the main scene.
+- [x] Add a versioned URL copy/share affordance.
+- [ ] Add a small in-place example gallery.
+- [x] Improve touch drag affordances with a visible active-handle state and larger hit target.
+- [x] Add screenshot-based visual regression coverage for the main scene.
 
 ## R³
 

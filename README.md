@@ -8,6 +8,8 @@ The first release focuses on the ideas beginners most often need to see:
 
 - linear combinations: `w = a·u₁ + b·u₂`
 - span as a line or the full plane
+- determinant as parallelogram area
+- dot products, angles, orthogonality, and projection
 - linear dependence and scalar multiples
 - linear independence
 - basis and dimension of R²
@@ -17,7 +19,8 @@ The first release focuses on the ideas beginners most often need to see:
 ## Product tour
 
 - **Playground** — one focused interactive coordinate plane, vector editors, live status cards, span overlays, combination construction, and deterministic explanations.
-- **Manipulate** — drag endpoints, type coordinates, toggle the standard basis, add a third vector, and lock or hide scene objects.
+- **Manipulate** — drag endpoints, type coordinates, choose explicit vector pairs for combinations and projections, toggle the standard basis, add a third vector, and lock or hide scene objects.
+- **Share** — copy a versioned scene link that reproduces vectors, selected pairs, coefficients, visibility, locks, and visual toggles.
 - **Understand** — every important state is shown visually, mathematically, and in plain language without leaving the playground.
 
 The scene supports mouse, touch, keyboard arrow-key nudging, and exact coordinate inputs. Vector colors are paired with labels and text, so color is never the only signal.
@@ -36,11 +39,11 @@ The repository includes `public/og-placeholder.svg` as a lightweight social-prev
 - ESLint 9
 - pnpm for package management
 
-There is no backend and no analytics. The current scene is serializable in URL parameters such as `/?u1=1,2&u2=2,4`.
+There is no backend and no analytics. The current scene is serializable in a versioned URL such as `/?scene=1&ids=u1%2Cu2&u1=1%2C0&u2=0%2C1&a=2&b=-1&comboPair=u1%2Cu2&projectionPair=u1%2Cu2&combo=1`.
 
 ## Quick start
 
-Requirements: Node 20+ and pnpm 9+ (the project is developed with Node 24 / pnpm 11).
+Requirements: Node 20.19+ and pnpm 11.20 (the project is developed with Node 24).
 
 ```bash
 pnpm install
@@ -70,12 +73,7 @@ pnpm e2e             # Playwright desktop + mobile tests
 pnpm check           # typecheck, lint, tests, and build
 ```
 
-For the first local install in a locked-down pnpm environment, approve the esbuild build script if prompted:
-
-```bash
-pnpm approve-builds --all
-pnpm install
-```
+Dependency lifecycle scripts are denied by default except for the reviewed `esbuild` entry in `pnpm-workspace.yaml`. Do not blanket-approve dependency build scripts; review and narrowly allow any future additions.
 
 To run Playwright locally for the first time:
 
@@ -98,10 +96,12 @@ src/
     numerical.ts                  tolerance and finite-number helpers
     linear-independence.ts        rank, dependence, scalar-multiple detection
     linear-combination.ts         combinations and 2×2 solving
+    projection.ts                 dot product, angle, projection, and rejection
     span.ts                       span dimension/kind
     basis.ts                      basis checks
     analysis.ts                   one derived result for the UI
   state/usePlaygroundState.ts     serializable client-side reducer and URL/theme persistence
+  scene.ts                        stable vector identity, labels, and visual tokens
   styles.css                      design system and responsive layout
 
 e2e/                              Playwright workflows
@@ -118,8 +118,10 @@ docs/ROADMAP.md                   intentionally deferred modules
 - Exact dependence uses a scale-aware tolerance (`ε = 10⁻⁹`), not direct floating-point equality.
 - A normalized determinant below `0.035` is shown as **Nearly dependent** to make numerical sensitivity visible; it remains mathematically independent unless it crosses the exact tolerance.
 - A set containing the zero vector is dependent.
+- Hidden vectors are excluded from the active analysis but remain saved in the scene.
 - Three or more vectors in R² are dependent, even when they still span the entire plane.
 - A basis of R² is exactly two linearly independent vectors: independent and spanning are shown as separate checks.
+- Projection onto the zero vector is undefined because it has no direction; the zero vector has no geometric angle.
 
 See [the architecture notes](docs/ARCHITECTURE.md) for the derivation and [the roadmap](docs/ROADMAP.md) for R³, transformations, determinants, projections, and eigenvectors.
 
@@ -137,6 +139,8 @@ pnpm preview
 ```
 
 No environment variables are required for V1. The included CI workflow runs type checking, lint, unit/component tests, production build, and Playwright tests.
+
+The application ships a restrictive browser CSP and self-hosted fonts, so it makes no third-party runtime requests. `public/_headers` adds clickjacking, MIME-sniffing, referrer, browser-permission, and cross-origin protections on hosts that support the `_headers` convention (including Netlify and Cloudflare Pages). Configure equivalent response headers—and HSTS at the HTTPS host—when deploying elsewhere. Development and preview servers bind to loopback by default; use `pnpm dev --host 0.0.0.0` only when LAN access is intentional and trusted.
 
 ## Contributing
 

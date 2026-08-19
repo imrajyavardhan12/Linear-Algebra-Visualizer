@@ -1,7 +1,6 @@
-import { memo, useMemo, useRef } from 'react';
-import { formatNumber } from '../../math';
-import { magnitude, normalize, scale } from '../../math';
-import type { LinearCombinationEvaluation, Vector2, VectorSetAnalysis } from '../../math';
+import { memo, useMemo, useRef, useState } from 'react';
+import { add, formatNumber, magnitude, normalize, scale } from '../../math';
+import type { LinearCombinationEvaluation, ProjectionEvaluation, Vector2, VectorSetAnalysis } from '../../math';
 
 export interface PlaneVector {
   id: string;
@@ -15,6 +14,15 @@ export interface PlaneVector {
 export interface CombinationOverlay {
   enabled: boolean;
   evaluation: LinearCombinationEvaluation;
+  firstLabel: string;
+  secondLabel: string;
+}
+
+export interface ProjectionOverlay {
+  enabled: boolean;
+  evaluation: ProjectionEvaluation;
+  sourceLabel: string;
+  ontoLabel: string;
 }
 
 interface VectorPlaneProps {
@@ -23,6 +31,7 @@ interface VectorPlaneProps {
   onChange: (id: string, value: Vector2) => void;
   showStandardBasis: boolean;
   combination?: CombinationOverlay;
+  projection?: ProjectionOverlay;
 }
 
 const WIDTH = 760;
@@ -32,7 +41,6 @@ const UNIT = 58;
 const PLANE_LIMIT = 6;
 const GRID_X = Array.from({ length: 13 }, (_, index) => index - PLANE_LIMIT);
 const GRID_Y = Array.from({ length: 11 }, (_, index) => index - 5);
-const COLORS = ['#ffb86b', '#9b8cff', '#5eead4'];
 const STANDARD_COLORS = ['#f4c47a', '#8bd6ca'];
 
 function toScreen(vector: Vector2): { x: number; y: number } {
@@ -52,7 +60,7 @@ function fromPointer(event: React.PointerEvent<SVGSVGElement>): Vector2 {
 }
 
 function arrowMarker(id: string, color: string) {
-  return <marker id={id} markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="strokeWidth"><path d="M0 0 9 4.5 0 9Z" fill={color} /></marker>;
+  return <marker key={id} id={id} markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto" markerUnits="strokeWidth"><path d="M0 0 9 4.5 0 9Z" fill={color} /></marker>;
 }
 
 function SpanOverlay({ vectors, analysis }: { vectors: PlaneVector[]; analysis: VectorSetAnalysis }) {
@@ -98,6 +106,93 @@ function clampScreenPoint(point: { x: number; y: number }): { x: number; y: numb
     x: Math.max(COMBINATION_PADDING, Math.min(WIDTH - COMBINATION_PADDING, point.x)),
     y: Math.max(COMBINATION_PADDING, Math.min(HEIGHT - COMBINATION_PADDING, point.y)),
   };
+}
+
+function DeterminantAreaOverlay({ vectors, analysis }: { vectors: PlaneVector[]; analysis: VectorSetAnalysis }) {
+  if (vectors.length !== 2 || analysis.determinant === null) return null;
+  const first = vectors[0];
+  const second = vectors[1];
+  if (!first || !second) return null;
+
+  const originPoint = toScreen({ x: 0, y: 0 });
+  const firstPoint = toScreen(first.value);
+  const secondPoint = toScreen(second.value);
+  const resultPoint = toScreen(add(first.value, second.value));
+  const rawPoints = [originPoint, firstPoint, resultPoint, secondPoint];
+  const points = rawPoints.map(clampScreenPoint);
+  const isClipped = rawPoints.some((point) => isOutsidePlane(point));
+  const area = Math.abs(analysis.determinant);
+
+  return <g className="determinant-overlay" role="group" aria-label={`Parallelogram area ${formatNumber(area)}`}>
+    <title>Parallelogram area equals the absolute determinant: {formatNumber(area)}</title>
+    <polygon className="determinant-parallelogram" points={points.map((point) => `${point.x},${point.y}`).join(' ')} />
+    <g className="determinant-area-label">
+      <rect x="31" y="31" width="150" height="23" rx="5" />
+      <text x="40" y="46">area = |det| = {formatNumber(area)}</text>
+    </g>
+    {isClipped && <g className="determinant-overflow-note"><rect x="31" y="59" width="150" height="22" rx="5" /><text x="106" y="74" textAnchor="middle">area continues outside view</text></g>}
+  </g>;
+}
+
+function screenDirection(vector: Vector2): { x: number; y: number } {
+  const unit = normalize(vector);
+  return { x: unit.x, y: -unit.y };
+}
+
+function angleArcPath(first: Vector2, second: Vector2, radius: number): string | null {
+  if (magnitude(first) <= 1e-8 || magnitude(second) <= 1e-8) return null;
+  const firstAngle = Math.atan2(-first.y, first.x);
+  const secondAngle = Math.atan2(-second.y, second.x);
+  let delta = secondAngle - firstAngle;
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  const start = { x: ORIGIN.x + radius * Math.cos(firstAngle), y: ORIGIN.y + radius * Math.sin(firstAngle) };
+  const end = { x: ORIGIN.x + radius * Math.cos(firstAngle + delta), y: ORIGIN.y + radius * Math.sin(firstAngle + delta) };
+  return `M${start.x} ${start.y}A${radius} ${radius} 0 0 ${delta >= 0 ? 1 : 0} ${end.x} ${end.y}`;
+}
+
+function rightAnglePath(projectionPoint: { x: number; y: number }, projection: Vector2, rejection: Vector2): string | null {
+  if (magnitude(projection) <= 1e-8 || magnitude(rejection) <= 1e-8) return null;
+  const along = screenDirection(scale(projection, -1));
+  const perpendicular = screenDirection(rejection);
+  const size = 12;
+  const first = { x: projectionPoint.x + along.x * size, y: projectionPoint.y + along.y * size };
+  const second = { x: first.x + perpendicular.x * size, y: first.y + perpendicular.y * size };
+  const third = { x: projectionPoint.x + perpendicular.x * size, y: projectionPoint.y + perpendicular.y * size };
+  return `M${first.x} ${first.y}L${second.x} ${second.y}L${third.x} ${third.y}`;
+}
+
+function ProjectionGeometry({ projection }: { projection: ProjectionOverlay }) {
+  const { evaluation, sourceLabel, ontoLabel } = projection;
+  const { source, onto, projection: projected, rejection } = evaluation;
+  const noteX = WIDTH - 238;
+  const noteY = HEIGHT - 62;
+
+  if (evaluation.scalar === null) {
+    return <g className="projection-overlay" role="group" aria-label={`Projection unavailable because ${ontoLabel} is the zero vector`}>
+      <g className="projection-note"><rect x={noteX} y={noteY} width="210" height="23" rx="5" /><text x={noteX + 105} y={noteY + 15} textAnchor="middle">no projection: target has no direction</text></g>
+    </g>;
+  }
+
+  const sourcePoint = clampScreenPoint(toScreen(source));
+  const projectedPoint = clampScreenPoint(toScreen(projected));
+  const projectedIsZero = magnitude(projected) <= 1e-8;
+  const sourceIsZero = magnitude(source) <= 1e-8;
+  const arc = angleArcPath(onto, source, 46);
+  const rightAngle = rightAnglePath(projectedPoint, projected, rejection);
+  const projectedLabel = labelPosition(projectedPoint, -14);
+  const angleText = evaluation.angleRadians === null ? 'undefined' : `${formatNumber(evaluation.angleRadians * (180 / Math.PI))}°`;
+
+  return <g className="projection-overlay" role="group" aria-label={`Projection of ${sourceLabel} onto ${ontoLabel}`}>
+    {projectedIsZero
+      ? <circle className="projection-zero-marker" cx={ORIGIN.x} cy={ORIGIN.y} r="5" />
+      : <line className="projection-vector" x1={ORIGIN.x} y1={ORIGIN.y} x2={projectedPoint.x} y2={projectedPoint.y} markerEnd="url(#arrow-projection)" />}
+    {!sourceIsZero && <line className="projection-drop" x1={projectedPoint.x} y1={projectedPoint.y} x2={sourcePoint.x} y2={sourcePoint.y} />}
+    {rightAngle && <path className="projection-right-angle" d={rightAngle} />}
+    {arc && <path className="projection-angle" d={arc} />}
+    <text className="projection-label" x={projectedLabel.x} y={projectedLabel.y} textAnchor={projectedLabel.anchor}>proj₍{ontoLabel}₎ {sourceLabel}</text>
+    <g className="projection-note"><rect x={noteX} y={noteY} width="210" height="23" rx="5" /><text x={noteX + 105} y={noteY + 15} textAnchor="middle">dot = {formatNumber(evaluation.dot)} · θ = {angleText}</text></g>
+  </g>;
 }
 
 function labelPosition(point: { x: number; y: number }, verticalOffset: number): { x: number; y: number; anchor: 'start' | 'end' } {
@@ -147,6 +242,7 @@ function CombinationArrow({
 
 function CombinationGeometry({ combination }: { combination: CombinationOverlay }) {
   const { firstScaled, secondScaled, result, coefficients } = combination.evaluation;
+  const { firstLabel, secondLabel } = combination;
   const firstPoint = toScreen(firstScaled);
   const secondPoint = toScreen(secondScaled);
   const resultPoint = toScreen(result);
@@ -154,8 +250,8 @@ function CombinationGeometry({ combination }: { combination: CombinationOverlay 
   const anyPointClipped = isOutsidePlane(firstPoint) || isOutsidePlane(secondPoint) || isOutsidePlane(resultPoint);
 
   return <g className="combination-overlay" role="group" aria-label="Linear combination construction">
-    <CombinationArrow vector={firstScaled} point={firstPoint} className="scaled-vector scaled-vector-a" markerEnd="url(#arrow-combination-a)" label={`a·u₁ = ${scaledLabel(coefficients.a, 'u₁')}`} labelOffset={-12} />
-    <CombinationArrow vector={secondScaled} point={secondPoint} className="scaled-vector scaled-vector-b" markerEnd="url(#arrow-combination-b)" label={`b·u₂ = ${scaledLabel(coefficients.b, 'u₂')}`} labelOffset={22} />
+    <CombinationArrow vector={firstScaled} point={firstPoint} className="scaled-vector scaled-vector-a" markerEnd="url(#arrow-combination-a)" label={`a·${firstLabel} = ${scaledLabel(coefficients.a, firstLabel)}`} labelOffset={-12} />
+    <CombinationArrow vector={secondScaled} point={secondPoint} className="scaled-vector scaled-vector-b" markerEnd="url(#arrow-combination-b)" label={`b·${secondLabel} = ${scaledLabel(coefficients.b, secondLabel)}`} labelOffset={22} />
     {hasBothComponents && <>
       <line className="parallelogram-edge" x1={clampScreenPoint(firstPoint).x} y1={clampScreenPoint(firstPoint).y} x2={clampScreenPoint(resultPoint).x} y2={clampScreenPoint(resultPoint).y} />
       <line className="parallelogram-edge" x1={clampScreenPoint(secondPoint).x} y1={clampScreenPoint(secondPoint).y} x2={clampScreenPoint(resultPoint).x} y2={clampScreenPoint(resultPoint).y} />
@@ -171,10 +267,13 @@ export const VectorPlane = memo(function VectorPlane({
   onChange,
   showStandardBasis,
   combination,
+  projection,
 }: VectorPlaneProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ id: string; pointerId: number } | null>(null);
+  const [activeVectorId, setActiveVectorId] = useState<string | null>(null);
   const visibleVectors = useMemo(() => vectors.filter((vector) => vector.visible), [vectors]);
+  const activeVector = activeVectorId ? vectors.find((vector) => vector.id === activeVectorId) : null;
   const handlePointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
     const drag = dragRef.current;
     if (!drag) return;
@@ -186,6 +285,7 @@ export const VectorPlane = memo(function VectorPlane({
   const stopDragging = (event: React.PointerEvent<SVGSVGElement>) => {
     if (dragRef.current?.pointerId === event.pointerId) {
       dragRef.current = null;
+      setActiveVectorId(null);
       try {
         event.currentTarget.releasePointerCapture(event.pointerId);
       } catch {
@@ -199,6 +299,7 @@ export const VectorPlane = memo(function VectorPlane({
     event.preventDefault();
     event.stopPropagation();
     dragRef.current = { id: vector.id, pointerId: event.pointerId };
+    setActiveVectorId(vector.id);
     svgRef.current?.setPointerCapture(event.pointerId);
   };
 
@@ -216,14 +317,16 @@ export const VectorPlane = memo(function VectorPlane({
   };
 
   return <div className="plane-shell">
+    <span className="sr-only" id="vector-handle-instructions">Vector endpoints are keyboard controls. Use the arrow keys to nudge by 0.1 units, or hold Shift to nudge by 1 unit.</span>
     <div className="plane-toolbar">
       <div>
         <span className="eyebrow">Interactive coordinate plane</span>
         <h2>Build the space</h2>
       </div>
-      <div className="plane-toolbar-meta"><span className="live-dot" /> Drag arrowheads · <kbd>← ↑ ↓ →</kbd> nudge</div>
+      <div className="plane-toolbar-meta"><span className="live-dot" /> {activeVector ? `Moving ${activeVector.label} · release to place` : <>Drag arrowheads · <kbd>← ↑ ↓ →</kbd> nudge</>}</div>
     </div>
     <div className="plane-canvas-wrap">
+      <span className="sr-only" role="status">{activeVector ? `Moving ${activeVector.label}. Release to place it.` : ''}</span>
       <svg
         ref={svgRef}
         className="plane-svg"
@@ -237,13 +340,12 @@ export const VectorPlane = memo(function VectorPlane({
         <title>Interactive R² coordinate plane</title>
         <defs>
           <filter id="soft-glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-          {arrowMarker('arrow-u1', COLORS[0]!)}
-          {arrowMarker('arrow-u2', COLORS[1]!)}
-          {arrowMarker('arrow-u3', COLORS[2]!)}
+          {vectors.map((vector) => arrowMarker(`arrow-${vector.id}`, vector.color))}
           {arrowMarker('arrow-e1', STANDARD_COLORS[0]!)}
           {arrowMarker('arrow-e2', STANDARD_COLORS[1]!)}
           {arrowMarker('arrow-combination-a', '#ffcf91')}
           {arrowMarker('arrow-combination-b', '#b4abff')}
+          {arrowMarker('arrow-projection', '#ffd27f')}
           {arrowMarker('arrow-resultant', '#f7f8fc')}
         </defs>
         <rect className="plane-background" x="0" y="0" width={WIDTH} height={HEIGHT} rx="20" />
@@ -251,7 +353,9 @@ export const VectorPlane = memo(function VectorPlane({
           {GRID_X.map((value) => { const point = toScreen({ x: value, y: 0 }); return <line key={`x-${value}`} x1={point.x} y1="20" x2={point.x} y2={HEIGHT - 20} />; })}
           {GRID_Y.map((value) => { const point = toScreen({ x: 0, y: value }); return <line key={`y-${value}`} x1="20" y1={point.y} x2={WIDTH - 20} y2={point.y} />; })}
         </g>
-        <SpanOverlay vectors={vectors} analysis={analysis} />
+        <SpanOverlay vectors={visibleVectors} analysis={analysis} />
+        <DeterminantAreaOverlay vectors={visibleVectors} analysis={analysis} />
+        {projection?.enabled && <ProjectionGeometry projection={projection} />}
         {showStandardBasis && <StandardBasisOverlay />}
         <g className="axes" aria-hidden="true">
           <line x1="20" y1={ORIGIN.y} x2={WIDTH - 20} y2={ORIGIN.y} />
@@ -267,24 +371,28 @@ export const VectorPlane = memo(function VectorPlane({
         {combination?.enabled && <CombinationGeometry combination={combination} />}
         {visibleVectors.map((vector, index) => {
           const point = toScreen(vector.value);
-          const color = vector.color || COLORS[index] || COLORS[0]!;
+          const color = vector.color;
           const markerId = `arrow-${vector.id}`;
+          const isActive = activeVectorId === vector.id;
           return <g className={`vector-g vector-${index + 1}`} key={vector.id}>
             <line className="vector-shadow" x1={ORIGIN.x} y1={ORIGIN.y} x2={point.x} y2={point.y} stroke={color} />
             <line className="vector-line" x1={ORIGIN.x} y1={ORIGIN.y} x2={point.x} y2={point.y} stroke={color} markerEnd={`url(#${markerId})`} />
             <circle className="vector-origin" cx={ORIGIN.x} cy={ORIGIN.y} r="4" fill={color} />
             <g
-              className={`vector-handle${vector.locked ? ' is-locked' : ''}`}
+              className={`vector-handle${vector.locked ? ' is-locked' : ''}${isActive ? ' is-active' : ''}`}
               transform={`translate(${point.x} ${point.y})`}
               role="button"
               tabIndex={vector.locked ? -1 : 0}
+              aria-roledescription="draggable vector endpoint"
+              aria-describedby="vector-handle-instructions"
               aria-label={`${vector.label} endpoint at (${formatNumber(vector.value.x)}, ${formatNumber(vector.value.y)})${vector.locked ? ', locked' : ', draggable'}`}
               aria-disabled={vector.locked}
               onPointerDown={(event) => startDragging(event, vector)}
               onKeyDown={(event) => nudge(event, vector)}
             >
-              <circle className="handle-hit-area" r="22" />
-              <circle className="vector-endpoint" r="7" fill={color} filter="url(#soft-glow)" />
+              <circle className="handle-hit-area" r={vector.locked ? 22 : 28} />
+              {isActive && <circle className="vector-active-ring" r="14" />}
+              <circle className="vector-endpoint" r={isActive ? 9 : 7} fill={color} filter="url(#soft-glow)" />
               <circle className="vector-endpoint-core" r="3" />
               <text className="vector-label" x="13" y="-12">{vector.label}</text>
               <text className="vector-coordinate" x="13" y="5">({formatNumber(vector.value.x)}, {formatNumber(vector.value.y)})</text>

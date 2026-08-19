@@ -4,6 +4,7 @@ export * from './format';
 export * from './linear-combination';
 export * from './linear-independence';
 export * from './numerical';
+export * from './projection';
 export * from './span';
 export * from './types';
 export * from './vector';

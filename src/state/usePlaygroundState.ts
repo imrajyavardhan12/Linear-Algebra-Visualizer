@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useReducer } from 'react';
 import { clamp } from '../math';
 import type { Vector2 } from '../math';
+import { VECTOR_IDS, vectorVisualDefinition } from '../scene';
+import { EXAMPLE_SCENES, type ExampleName } from './examples';
 
 export type Theme = 'dark' | 'light';
 
@@ -12,11 +14,19 @@ export interface VectorItem {
   locked: boolean;
 }
 
+export interface VectorPairSelection {
+  firstId: string | null;
+  secondId: string | null;
+}
+
 export interface PlaygroundState {
   vectors: VectorItem[];
   coefficients: { a: number; b: number };
+  combinationPair: VectorPairSelection;
+  projectionPair: VectorPairSelection;
   showCombination: boolean;
   showStandardBasis: boolean;
+  showProjection: boolean;
   theme: Theme;
 }
 
@@ -27,24 +37,29 @@ type Action =
   | { type: 'add-vector' }
   | { type: 'remove-vector'; id: string }
   | { type: 'set-coefficient'; key: 'a' | 'b'; value: number }
+  | { type: 'set-combination-vector'; slot: 'first' | 'second'; id: string }
+  | { type: 'set-projection-vector'; slot: 'first' | 'second'; id: string }
   | { type: 'toggle-combination' }
   | { type: 'toggle-standard-basis' }
+  | { type: 'toggle-projection' }
+  | { type: 'load-example'; example: ExampleName }
   | { type: 'set-theme'; theme: Theme }
   | { type: 'reset' };
 
 const MAX_COORDINATE = 12;
-const LABELS = ['u₁', 'u₂', 'u₃'];
-const IDS = ['u1', 'u2', 'u3'];
+const MAX_COEFFICIENT = 5;
+const SHARE_SCHEMA_VERSION = '1';
 
 export const DEFAULT_VECTOR_VALUES: Vector2[] = [
   { x: 2, y: 1 },
   { x: -1, y: 2 },
 ];
 
-function makeVector(index: number, value: Vector2): VectorItem {
+function makeVector(id: string, value: Vector2, fallbackIndex = 0): VectorItem {
+  const definition = vectorVisualDefinition(id, fallbackIndex);
   return {
-    id: IDS[index] ?? `u${index + 1}`,
-    label: LABELS[index] ?? `u${index + 1}`,
+    id: definition.id,
+    label: definition.label,
     value: { x: value.x, y: value.y },
     visible: true,
     locked: false,
@@ -52,7 +67,7 @@ function makeVector(index: number, value: Vector2): VectorItem {
 }
 
 function makeDefaultVectors(values = DEFAULT_VECTOR_VALUES): VectorItem[] {
-  return values.map((value, index) => makeVector(index, value));
+  return values.map((value, index) => makeVector(VECTOR_IDS[index] ?? `u${index + 1}`, value, index));
 }
 
 function finiteCoordinate(value: number): number {
@@ -73,16 +88,125 @@ function parseVector(value: string | null): Vector2 | null {
   return sanitizeVector({ x, y });
 }
 
+function parseVectorIds(value: string | null): string[] {
+  if (!value) return [];
+  return value.split(',').filter((id, index, ids): id is string => VECTOR_IDS.includes(id) && ids.indexOf(id) === index);
+}
+
+function reconcilePairSelection(pair: VectorPairSelection, vectors: VectorItem[]): VectorPairSelection {
+  const activeIds = vectors.filter((vector) => vector.visible).map((vector) => vector.id);
+  const pairIsActive = pair.firstId !== null
+    && pair.secondId !== null
+    && pair.firstId !== pair.secondId
+    && activeIds.includes(pair.firstId)
+    && activeIds.includes(pair.secondId);
+  if (pairIsActive) return pair;
+  return { firstId: activeIds[0] ?? null, secondId: activeIds[1] ?? null };
+}
+
+function initialPairFromUrl(name: 'comboPair' | 'projectionPair', vectors: VectorItem[]): VectorPairSelection {
+  if (typeof window === 'undefined') return reconcilePairSelection({ firstId: null, secondId: null }, vectors);
+  const params = new URLSearchParams(window.location.search);
+  const ids = params.get('scene') === SHARE_SCHEMA_VERSION ? parseVectorIds(params.get(name)) : [];
+  return reconcilePairSelection({ firstId: ids[0] ?? null, secondId: ids[1] ?? null }, vectors);
+}
+
+function updatePairSelection(
+  pair: VectorPairSelection,
+  slot: 'first' | 'second',
+  id: string,
+  vectors: VectorItem[],
+): VectorPairSelection {
+  if (!vectors.some((vector) => vector.id === id && vector.visible)) return pair;
+  if (slot === 'first') {
+    return reconcilePairSelection({
+      firstId: id,
+      secondId: pair.secondId === id ? pair.firstId : pair.secondId,
+    }, vectors);
+  }
+  return reconcilePairSelection({
+    firstId: pair.firstId === id ? pair.secondId : pair.firstId,
+    secondId: id,
+  }, vectors);
+}
+
+function applySceneFlags(vectors: VectorItem[], params: URLSearchParams): VectorItem[] {
+  const hidden = new Set(parseVectorIds(params.get('hidden')));
+  const locked = new Set(parseVectorIds(params.get('locked')));
+  return vectors.map((vector) => ({
+    ...vector,
+    visible: !hidden.has(vector.id),
+    locked: locked.has(vector.id),
+  }));
+}
+
 function initialVectorsFromUrl(): VectorItem[] {
   if (typeof window === 'undefined') return makeDefaultVectors();
   const params = new URLSearchParams(window.location.search);
+  if (params.get('scene') === SHARE_SCHEMA_VERSION && params.has('ids')) {
+    const ids = parseVectorIds(params.get('ids'));
+    const vectors = ids.map((id, index) => {
+      const value = parseVector(params.get(id));
+      return value ? makeVector(id, value, index) : null;
+    });
+    if (vectors.every((vector): vector is VectorItem => vector !== null)) {
+      return applySceneFlags(vectors, params);
+    }
+  }
+
   const values: Vector2[] = [];
-  for (const id of IDS) {
+  for (const id of VECTOR_IDS) {
     const parsed = parseVector(params.get(id));
     if (!parsed) break;
     values.push(parsed);
   }
   return values.length > 0 ? makeDefaultVectors(values) : makeDefaultVectors();
+}
+
+function parseBoundedNumber(value: string | null, fallback: number, min: number, max: number): number {
+  if (value === null || value.trim() === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? clamp(parsed, min, max) : fallback;
+}
+
+function initialCoefficientsFromUrl(): { a: number; b: number } {
+  if (typeof window === 'undefined') return { a: 1, b: 1 };
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('scene') !== SHARE_SCHEMA_VERSION) return { a: 1, b: 1 };
+  return {
+    a: parseBoundedNumber(params.get('a'), 1, -MAX_COEFFICIENT, MAX_COEFFICIENT),
+    b: parseBoundedNumber(params.get('b'), 1, -MAX_COEFFICIENT, MAX_COEFFICIENT),
+  };
+}
+
+function initialFlagFromUrl(name: 'combo' | 'basis' | 'projection'): boolean {
+  if (typeof window === 'undefined') return false;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('scene') === SHARE_SCHEMA_VERSION && params.get(name) === '1';
+}
+
+export function serializeSceneState(state: Pick<PlaygroundState, 'vectors' | 'coefficients' | 'combinationPair' | 'projectionPair' | 'showCombination' | 'showStandardBasis' | 'showProjection'>): URLSearchParams {
+  const params = new URLSearchParams();
+  params.set('scene', SHARE_SCHEMA_VERSION);
+  params.set('ids', state.vectors.map((vector) => vector.id).join(','));
+  state.vectors.forEach((vector) => params.set(vector.id, `${vector.value.x},${vector.value.y}`));
+  params.set('a', String(state.coefficients.a));
+  params.set('b', String(state.coefficients.b));
+  if (state.combinationPair.firstId && state.combinationPair.secondId) {
+    params.set('comboPair', `${state.combinationPair.firstId},${state.combinationPair.secondId}`);
+  }
+  if (state.projectionPair.firstId && state.projectionPair.secondId) {
+    params.set('projectionPair', `${state.projectionPair.firstId},${state.projectionPair.secondId}`);
+  }
+  if (state.showCombination) params.set('combo', '1');
+  if (state.showStandardBasis) params.set('basis', '1');
+  if (state.showProjection) params.set('projection', '1');
+
+  const hidden = state.vectors.filter((vector) => !vector.visible).map((vector) => vector.id);
+  const locked = state.vectors.filter((vector) => vector.locked).map((vector) => vector.id);
+  if (hidden.length > 0) params.set('hidden', hidden.join(','));
+  if (locked.length > 0) params.set('locked', locked.join(','));
+  return params;
 }
 
 function initialTheme(): Theme {
@@ -91,11 +215,16 @@ function initialTheme(): Theme {
   return saved === 'light' || saved === 'dark' ? saved : 'dark';
 }
 
+const initialVectors = initialVectorsFromUrl();
+
 const initialState: PlaygroundState = {
-  vectors: initialVectorsFromUrl(),
-  coefficients: { a: 1, b: 1 },
-  showCombination: false,
-  showStandardBasis: false,
+  vectors: initialVectors,
+  coefficients: initialCoefficientsFromUrl(),
+  combinationPair: initialPairFromUrl('comboPair', initialVectors),
+  projectionPair: initialPairFromUrl('projectionPair', initialVectors),
+  showCombination: initialFlagFromUrl('combo'),
+  showStandardBasis: initialFlagFromUrl('basis'),
+  showProjection: initialFlagFromUrl('projection'),
   theme: initialTheme(),
 };
 
@@ -108,13 +237,17 @@ function reducer(state: PlaygroundState, action: Action): PlaygroundState {
           ? { ...vector, value: sanitizeVector(action.value) }
           : vector),
       };
-    case 'toggle-visible':
+    case 'toggle-visible': {
+      const vectors = state.vectors.map((vector) => vector.id === action.id
+        ? { ...vector, visible: !vector.visible }
+        : vector);
       return {
         ...state,
-        vectors: state.vectors.map((vector) => vector.id === action.id
-          ? { ...vector, visible: !vector.visible }
-          : vector),
+        vectors,
+        combinationPair: reconcilePairSelection(state.combinationPair, vectors),
+        projectionPair: reconcilePairSelection(state.projectionPair, vectors),
       };
+    }
     case 'toggle-locked':
       return {
         ...state,
@@ -124,26 +257,79 @@ function reducer(state: PlaygroundState, action: Action): PlaygroundState {
       };
     case 'add-vector': {
       if (state.vectors.length >= 3) return state;
-      const nextIndex = IDS.findIndex((id) => !state.vectors.some((vector) => vector.id === id));
+      const nextIndex = VECTOR_IDS.findIndex((id) => !state.vectors.some((vector) => vector.id === id));
       const index = nextIndex >= 0 ? nextIndex : state.vectors.length;
       const defaults: Vector2[] = [{ x: 1, y: 1 }, { x: 2, y: -1 }, { x: -1, y: 1 }];
-      return { ...state, vectors: [...state.vectors, makeVector(index, defaults[index] ?? { x: 1, y: 1 })] };
+      const id = VECTOR_IDS[index] ?? `u${index + 1}`;
+      const vectors = [...state.vectors, makeVector(id, defaults[index] ?? { x: 1, y: 1 }, index)];
+      return {
+        ...state,
+        vectors,
+        combinationPair: reconcilePairSelection(state.combinationPair, vectors),
+        projectionPair: reconcilePairSelection(state.projectionPair, vectors),
+      };
     }
-    case 'remove-vector':
-      return { ...state, vectors: state.vectors.filter((vector) => vector.id !== action.id) };
+    case 'remove-vector': {
+      const vectors = state.vectors.filter((vector) => vector.id !== action.id);
+      return {
+        ...state,
+        vectors,
+        combinationPair: reconcilePairSelection(state.combinationPair, vectors),
+        projectionPair: reconcilePairSelection(state.projectionPair, vectors),
+      };
+    }
     case 'set-coefficient':
       return {
         ...state,
         coefficients: { ...state.coefficients, [action.key]: Number.isFinite(action.value) ? clamp(action.value, -5, 5) : 0 },
       };
+    case 'set-combination-vector':
+      return {
+        ...state,
+        combinationPair: updatePairSelection(state.combinationPair, action.slot, action.id, state.vectors),
+      };
+    case 'set-projection-vector':
+      return {
+        ...state,
+        projectionPair: updatePairSelection(state.projectionPair, action.slot, action.id, state.vectors),
+      };
     case 'toggle-combination':
       return { ...state, showCombination: !state.showCombination };
     case 'toggle-standard-basis':
       return { ...state, showStandardBasis: !state.showStandardBasis };
+    case 'toggle-projection':
+      return { ...state, showProjection: !state.showProjection };
+    case 'load-example': {
+      const example = EXAMPLE_SCENES[action.example];
+      const vectors = makeDefaultVectors(example.vectors);
+      const defaultPair = reconcilePairSelection({ firstId: null, secondId: null }, vectors);
+      return {
+        ...state,
+        vectors,
+        coefficients: { ...example.coefficients },
+        combinationPair: defaultPair,
+        projectionPair: defaultPair,
+        showCombination: example.showCombination,
+        showStandardBasis: example.showStandardBasis,
+        showProjection: example.showProjection ?? false,
+      };
+    }
     case 'set-theme':
       return { ...state, theme: action.theme };
-    case 'reset':
-      return { ...state, vectors: makeDefaultVectors(), coefficients: { a: 1, b: 1 }, showCombination: false };
+    case 'reset': {
+      const vectors = makeDefaultVectors();
+      const defaultPair = reconcilePairSelection({ firstId: null, secondId: null }, vectors);
+      return {
+        ...state,
+        vectors,
+        coefficients: { a: 1, b: 1 },
+        combinationPair: defaultPair,
+        projectionPair: defaultPair,
+        showCombination: false,
+        showStandardBasis: false,
+        showProjection: false,
+      };
+    }
     default:
       return state;
   }
@@ -158,11 +344,9 @@ export function usePlaygroundState() {
   }, [state.theme]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    state.vectors.forEach((vector) => params.set(vector.id, `${vector.value.x},${vector.value.y}`));
-    IDS.filter((id) => !state.vectors.some((vector) => vector.id === id)).forEach((id) => params.delete(id));
+    const params = serializeSceneState(state);
     window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
-  }, [state.vectors]);
+  }, [state]);
 
   const setVector = useCallback((id: string, value: Vector2) => dispatch({ type: 'set-vector', id, value }), []);
   const setCoefficient = useCallback((key: 'a' | 'b', value: number) => dispatch({ type: 'set-coefficient', key, value }), []);
@@ -176,8 +360,12 @@ export function usePlaygroundState() {
       addVector: () => dispatch({ type: 'add-vector' }),
       removeVector: (id: string) => dispatch({ type: 'remove-vector', id }),
       setCoefficient,
+      setCombinationVector: (slot: 'first' | 'second', id: string) => dispatch({ type: 'set-combination-vector', slot, id }),
+      setProjectionVector: (slot: 'first' | 'second', id: string) => dispatch({ type: 'set-projection-vector', slot, id }),
       toggleCombination: () => dispatch({ type: 'toggle-combination' }),
       toggleStandardBasis: () => dispatch({ type: 'toggle-standard-basis' }),
+      toggleProjection: () => dispatch({ type: 'toggle-projection' }),
+      loadExample: (example: ExampleName) => dispatch({ type: 'load-example', example }),
       setTheme: (theme: Theme) => dispatch({ type: 'set-theme', theme }),
       reset: () => dispatch({ type: 'reset' }),
     },

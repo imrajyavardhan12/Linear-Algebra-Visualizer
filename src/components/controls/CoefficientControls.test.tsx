@@ -21,6 +21,32 @@ describe('CoefficientControls', () => {
     expect(screen.getByText('−u₂ = (1, -2)')).toBeInTheDocument();
   });
 
+  it('lets the user choose vectors by stable identity', async () => {
+    const user = userEvent.setup();
+    const onPairChange = vi.fn();
+    render(
+      <CoefficientControls
+        coefficients={{ a: 1, b: 1 }}
+        evaluation={{ ...evaluation, coefficients: { a: 1, b: 1 } }}
+        enabled={false}
+        pairOptions={[
+          { id: 'u1', label: 'u₁' },
+          { id: 'u2', label: 'u₂' },
+          { id: 'u3', label: 'u₃' },
+        ]}
+        firstId="u1"
+        secondId="u2"
+        onPairChange={onPairChange}
+        onToggle={vi.fn()}
+        onChange={vi.fn()}
+      />,
+    );
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Vector for coefficient a' }), 'u3');
+
+    expect(onPairChange).toHaveBeenCalledWith('first', 'u3');
+  });
+
   it('emits coefficient changes from both the slider and exact input', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

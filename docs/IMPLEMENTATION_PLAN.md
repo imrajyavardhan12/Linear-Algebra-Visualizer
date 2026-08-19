@@ -17,7 +17,8 @@
 5. **Basis and dimension** — standard basis, third vector, theorem explanation, concrete dependency relations.
 6. **Explanation-first UX** — deterministic status cards, basis checks, plain-language state explanations, and a contextual theorem prompt inside the playground.
 7. **Production polish** — responsive layout, themes, keyboard/touch affordances, metadata, README, architecture/roadmap docs, unit/component/E2E coverage.
+8. **Explicit relationship pairs** — accessible stable-ID selectors independently choose combination inputs and projection source/target, with deterministic fallback and URL persistence.
 
 ## Intentionally deferred
 
-R³, matrix transformations, determinant-focused visualizations, projections, dot products, eigenvectors, accounts, and backend persistence are separated into the roadmap so they do not dilute the R² experience.
+R³, matrix transformations, eigenvectors, accounts, and backend persistence remain separated into the roadmap so they do not dilute the R² experience. Determinant area, dot product, angle, and projection exploration now deepen the existing Playground without creating new pages.

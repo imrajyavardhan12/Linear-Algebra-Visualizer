@@ -21,7 +21,8 @@ export function StatusPanel({ vectors, names, analysis }: StatusPanelProps) {
     .map(({ coefficient, index }, termIndex) => `${termIndex === 0 && coefficient < 0 ? '−' : termIndex === 0 ? '' : coefficient < 0 ? ' − ' : ' + '}${formatNumber(Math.abs(coefficient)) === '1' ? '' : formatNumber(Math.abs(coefficient))}${names[index] ?? `u${index + 1}`}`);
 
   return <div className="insight-stack">
-    <section className={`status-card status-${analysis.status}`} aria-live="polite">
+    <span className="sr-only" role="status">{statusLabel}. Span dimension {analysis.spanDimension}.</span>
+    <section className={`status-card status-${analysis.status}`} aria-label="Current vector relationship">
       <div className="status-card-topline"><span className="status-eyebrow">Current relationship</span><span className="status-signal"><span /> live</span></div>
       <div className="status-title-row"><span className="status-icon">{analysis.status === 'independent' ? <Icon name="check" size={18} strokeWidth={2.3} /> : analysis.status === 'empty' ? <Icon name="plus" size={18} /> : <Icon name="x" size={18} strokeWidth={2.3} />}</span><h2>{statusLabel}</h2></div>
       <p className="status-body">{explanation.body}</p>

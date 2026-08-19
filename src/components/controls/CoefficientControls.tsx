@@ -1,11 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatEquationTerm, formatNumber, formatVector, type LinearCombinationEvaluation } from '../../math';
 import { Icon } from '../Icon';
+import { VectorPairSelector, type VectorPairOption } from './VectorPairSelector';
 
 interface CoefficientControlsProps {
   coefficients: { a: number; b: number };
   evaluation: LinearCombinationEvaluation | null;
   enabled: boolean;
+  firstLabel?: string;
+  secondLabel?: string;
+  pairOptions?: VectorPairOption[];
+  firstId?: string;
+  secondId?: string;
+  onPairChange?: (slot: 'first' | 'second', id: string) => void;
   onToggle: () => void;
   onChange: (key: 'a' | 'b', value: number) => void;
 }
@@ -13,8 +20,12 @@ interface CoefficientControlsProps {
 type CoefficientKey = 'a' | 'b';
 type Drafts = Record<CoefficientKey, string>;
 
-function expressionFor(coefficients: { a: number; b: number }): string {
-  return `w = ${formatEquationTerm(coefficients.a, 'u₁', true)} ${formatEquationTerm(coefficients.b, 'u₂')}`;
+function expressionFor(
+  coefficients: { a: number; b: number },
+  firstLabel = 'u₁',
+  secondLabel = 'u₂',
+): string {
+  return `w = ${formatEquationTerm(coefficients.a, firstLabel, true)} ${formatEquationTerm(coefficients.b, secondLabel)}`;
 }
 
 function scaledExpression(coefficient: number, symbol: string): string {
@@ -22,7 +33,19 @@ function scaledExpression(coefficient: number, symbol: string): string {
   return `${coefficient < 0 ? '−' : ''}${magnitudeText}${symbol}`;
 }
 
-export function CoefficientControls({ coefficients, evaluation, enabled, onToggle, onChange }: CoefficientControlsProps) {
+export function CoefficientControls({
+  coefficients,
+  evaluation,
+  enabled,
+  firstLabel = 'u₁',
+  secondLabel = 'u₂',
+  pairOptions = [],
+  firstId,
+  secondId,
+  onPairChange,
+  onToggle,
+  onChange,
+}: CoefficientControlsProps) {
   const hasPair = evaluation !== null;
   const activeCoefficients = evaluation?.coefficients ?? coefficients;
   const [drafts, setDrafts] = useState<Drafts>(() => ({ a: formatNumber(coefficients.a), b: formatNumber(coefficients.b) }));
@@ -56,6 +79,8 @@ export function CoefficientControls({ coefficients, evaluation, enabled, onToggl
     focusedFieldRef.current = null;
   };
 
+  const expression = expressionFor(activeCoefficients, firstLabel, secondLabel);
+
   return <section className={`control-section combination-section ${enabled ? 'is-open' : ''}`} aria-labelledby="combination-heading">
     <div className="section-heading-row">
       <div>
@@ -68,7 +93,18 @@ export function CoefficientControls({ coefficients, evaluation, enabled, onToggl
     </div>
     {!hasPair && <p className="muted-copy">Add a second vector to combine two directions.</p>}
     {hasPair && <>
-      <div className="formula-display" aria-label={expressionFor(activeCoefficients)}><span>w</span> = <em>a</em>u₁ + <em>b</em>u₂</div>
+      {pairOptions.length >= 2 && firstId && secondId && onPairChange && <VectorPairSelector
+        options={pairOptions}
+        firstId={firstId}
+        secondId={secondId}
+        firstLabel="Coefficient a"
+        secondLabel="Coefficient b"
+        firstAriaLabel="Vector for coefficient a"
+        secondAriaLabel="Vector for coefficient b"
+        separator="+"
+        onChange={onPairChange}
+      />}
+      <div className="formula-display" aria-label={expression}><span>w</span> = <em>a</em>{firstLabel} + <em>b</em>{secondLabel}</div>
       <div className="coefficient-grid">
         {(['a', 'b'] as const).map((key, index) => <label className="coefficient-control" key={key}>
           <div className="coefficient-label"><span className={`coefficient-dot coefficient-dot-${index}`} /> <strong>{key}</strong><output>{formatNumber(activeCoefficients[key])}</output></div>
@@ -77,9 +113,9 @@ export function CoefficientControls({ coefficients, evaluation, enabled, onToggl
         </label>)}
       </div>
       {enabled && evaluation && <div className="combination-calculation" aria-live="polite">
-        <div className="combination-equation"><span>w</span> = {expressionFor(activeCoefficients).replace('w = ', '')} = {formatVector(evaluation.result)}</div>
-        <div className="calculation-line"><span className="calculation-key">Scaled</span><span>{scaledExpression(activeCoefficients.a, 'u₁')} = {formatVector(evaluation.firstScaled)}</span></div>
-        <div className="calculation-line"><span className="calculation-key">Scaled</span><span>{scaledExpression(activeCoefficients.b, 'u₂')} = {formatVector(evaluation.secondScaled)}</span></div>
+        <div className="combination-equation"><span>w</span> = {expression.replace('w = ', '')} = {formatVector(evaluation.result)}</div>
+        <div className="calculation-line"><span className="calculation-key">Scaled</span><span>{scaledExpression(activeCoefficients.a, firstLabel)} = {formatVector(evaluation.firstScaled)}</span></div>
+        <div className="calculation-line"><span className="calculation-key">Scaled</span><span>{scaledExpression(activeCoefficients.b, secondLabel)} = {formatVector(evaluation.secondScaled)}</span></div>
         <div className="calculation-line result-line"><span className="calculation-key">Result w</span><strong>{formatVector(evaluation.result)}</strong></div>
       </div>}
       {!enabled && <button className="text-action" type="button" onClick={onToggle}><Icon name="arrow" size={14} /> Reveal the construction</button>}

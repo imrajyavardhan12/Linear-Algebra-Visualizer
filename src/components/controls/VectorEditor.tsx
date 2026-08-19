@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { formatNumber } from '../../math';
 import type { Vector2 } from '../../math';
 import type { VectorItem } from '../../state/usePlaygroundState';
+import { vectorVisualDefinition } from '../../scene';
 import { Icon } from '../Icon';
 
 interface VectorEditorProps {
@@ -14,8 +15,6 @@ interface VectorEditorProps {
 }
 
 type Drafts = Record<string, { x: string; y: string }>;
-
-const VECTOR_COLORS = ['vector-orange', 'vector-violet', 'vector-teal'];
 
 function initialDrafts(vectors: VectorItem[]): Drafts {
   return Object.fromEntries(vectors.map((vector) => [vector.id, {
@@ -91,7 +90,7 @@ export function VectorEditor({ vectors, onChange, onToggleVisible, onToggleLocke
     <div className="vector-list">
       {vectors.map((vector, index) => {
         const draft = drafts[vector.id] ?? { x: formatNumber(vector.value.x), y: formatNumber(vector.value.y) };
-        const colorClass = VECTOR_COLORS[index] ?? VECTOR_COLORS[0];
+        const colorClass = vectorVisualDefinition(vector.id, index).editorClass;
         return <article className={`vector-editor-card ${!vector.visible ? 'is-hidden' : ''}`} key={vector.id}>
           <div className="vector-card-topline">
             <div className="vector-name"><span className={`vector-swatch ${colorClass}`} /> <strong>{vector.label}</strong><span className="vector-card-coordinates">({formatNumber(vector.value.x)}, {formatNumber(vector.value.y)})</span></div>
@@ -119,5 +118,6 @@ export function VectorEditor({ vectors, onChange, onToggleVisible, onToggleLocke
       })}
     </div>
     <p className="control-helper"><span className="helper-key">↗</span> Drag an endpoint on the plane, or type exact coordinates here.</p>
+    <p className="control-helper"><span className="helper-key">◌</span> Hidden vectors stay saved but are excluded from the live analysis.</p>
   </section>;
 }

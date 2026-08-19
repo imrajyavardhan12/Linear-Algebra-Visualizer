@@ -12,6 +12,9 @@ import {
   magnitude,
   normalize,
   pairDependence,
+  angleBetween,
+  evaluateProjection,
+  projectOnto,
   rankOfVectors,
   scalarMultipleFactor,
   solveTwoVectorCombination,
@@ -45,6 +48,27 @@ describe('vector operations', () => {
   it('computes the signed 2D determinant', () => {
     expect(determinant2D({ x: 1, y: 0 }, { x: 0, y: 1 })).toBe(1);
     expect(determinant2D({ x: 0, y: 1 }, { x: 1, y: 0 })).toBe(-1);
+  });
+
+  it('projects onto a direction and safely handles a zero target', () => {
+    expect(projectOnto({ x: 3, y: 4 }, { x: 1, y: 0 })).toEqual({ x: 3, y: 0 });
+    expect(projectOnto({ x: 3, y: 4 }, zero)).toBeNull();
+  });
+
+  it('computes right angles and a complete projection decomposition', () => {
+    expect(angleBetween({ x: 1, y: 0 }, { x: 0, y: 1 })).toBeCloseTo(Math.PI / 2);
+
+    const result = evaluateProjection({ x: 3, y: 4 }, { x: 1, y: 0 });
+    expect(result.dot).toBe(3);
+    expect(result.cosine).toBeCloseTo(0.6);
+    expect(result.projection).toEqual({ x: 3, y: 0 });
+    expect(result.rejection).toEqual({ x: 0, y: 4 });
+  });
+
+  it('leaves angle undefined when the source or target is zero', () => {
+    expect(angleBetween(zero, { x: 1, y: 0 })).toBeNull();
+    expect(evaluateProjection({ x: 1, y: 2 }, zero).scalar).toBeNull();
+    expect(evaluateProjection({ x: 1, y: 2 }, zero).rejection).toEqual({ x: 1, y: 2 });
   });
 });
 
