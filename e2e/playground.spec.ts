@@ -220,10 +220,14 @@ test('rejects hostile scene content and avoids third-party runtime requests', as
 test('keeps the primary playground layout visually stable', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.evaluate(() => document.fonts.ready);
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('A fixed viewport is required for visual regression testing');
+  const screenshotHeight = testInfo.project.name === 'mobile' ? 2700 : 2000;
+
   await expect(page).toHaveScreenshot('playground.png', {
     animations: 'disabled',
     caret: 'hide',
-    fullPage: true,
+    clip: { x: 0, y: 0, width: viewport.width, height: screenshotHeight },
     maxDiffPixelRatio: testInfo.project.name === 'mobile' ? 0.055 : 0.02,
   });
 });
