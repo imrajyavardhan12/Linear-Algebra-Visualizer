@@ -9,8 +9,12 @@ export function pairDependence(
   nearTolerance = NEAR_DEPENDENCE_EPSILON,
 ): PairDependence {
   const determinant = determinant2D(first, second);
-  const denominator = magnitude(first) * magnitude(second);
-  const normalizedDeterminant = denominator <= tolerance ? 0 : Math.abs(determinant) / denominator;
+  const firstMagnitude = magnitude(first);
+  const secondMagnitude = magnitude(second);
+  const denominator = firstMagnitude * secondMagnitude;
+  const normalizedDeterminant = firstMagnitude <= tolerance || secondMagnitude <= tolerance
+    ? 0
+    : Math.abs(determinant) / denominator;
 
   if (normalizedDeterminant <= tolerance) {
     return { kind: 'dependent', determinant, normalizedDeterminant };

@@ -19,14 +19,20 @@ export interface VectorPairSelection {
   secondId: string | null;
 }
 
+export interface BasisCoordinateSelection extends VectorPairSelection {
+  targetId: string | null;
+}
+
 export interface PlaygroundState {
   vectors: VectorItem[];
   coefficients: { a: number; b: number };
   combinationPair: VectorPairSelection;
   projectionPair: VectorPairSelection;
+  basisCoordinateSelection: BasisCoordinateSelection;
   showCombination: boolean;
   showStandardBasis: boolean;
   showProjection: boolean;
+  showBasisCoordinates: boolean;
   theme: Theme;
 }
 
@@ -39,9 +45,12 @@ type Action =
   | { type: 'set-coefficient'; key: 'a' | 'b'; value: number }
   | { type: 'set-combination-vector'; slot: 'first' | 'second'; id: string }
   | { type: 'set-projection-vector'; slot: 'first' | 'second'; id: string }
+  | { type: 'set-coordinate-basis-vector'; slot: 'first' | 'second'; id: string }
+  | { type: 'set-coordinate-target'; id: string }
   | { type: 'toggle-combination' }
   | { type: 'toggle-standard-basis' }
   | { type: 'toggle-projection' }
+  | { type: 'toggle-basis-coordinates' }
   | { type: 'load-example'; example: ExampleName }
   | { type: 'set-theme'; theme: Theme }
   | { type: 'reset' };
@@ -109,6 +118,39 @@ function initialPairFromUrl(name: 'comboPair' | 'projectionPair', vectors: Vecto
   const params = new URLSearchParams(window.location.search);
   const ids = params.get('scene') === SHARE_SCHEMA_VERSION ? parseVectorIds(params.get(name)) : [];
   return reconcilePairSelection({ firstId: ids[0] ?? null, secondId: ids[1] ?? null }, vectors);
+}
+
+function reconcileBasisCoordinateSelection(
+  selection: BasisCoordinateSelection,
+  vectors: VectorItem[],
+  preferNonBasisTarget = false,
+): BasisCoordinateSelection {
+  const pair = reconcilePairSelection(selection, vectors);
+  const activeIds = vectors.filter((vector) => vector.visible).map((vector) => vector.id);
+  const selectedTarget = selection.targetId !== null && activeIds.includes(selection.targetId)
+    ? selection.targetId
+    : null;
+  const nonBasisTarget = activeIds.find((id) => id !== pair.firstId && id !== pair.secondId) ?? null;
+  return {
+    ...pair,
+    targetId: preferNonBasisTarget && nonBasisTarget
+      ? nonBasisTarget
+      : selectedTarget ?? nonBasisTarget ?? pair.firstId,
+  };
+}
+
+function initialBasisCoordinateSelectionFromUrl(vectors: VectorItem[]): BasisCoordinateSelection {
+  if (typeof window === 'undefined') {
+    return reconcileBasisCoordinateSelection({ firstId: null, secondId: null, targetId: null }, vectors);
+  }
+  const params = new URLSearchParams(window.location.search);
+  const basisIds = params.get('scene') === SHARE_SCHEMA_VERSION ? parseVectorIds(params.get('coordinateBasis')) : [];
+  const targetIds = params.get('scene') === SHARE_SCHEMA_VERSION ? parseVectorIds(params.get('coordinateTarget')) : [];
+  return reconcileBasisCoordinateSelection({
+    firstId: basisIds[0] ?? null,
+    secondId: basisIds[1] ?? null,
+    targetId: targetIds[0] ?? null,
+  }, vectors);
 }
 
 function updatePairSelection(
@@ -179,13 +221,13 @@ function initialCoefficientsFromUrl(): { a: number; b: number } {
   };
 }
 
-function initialFlagFromUrl(name: 'combo' | 'basis' | 'projection'): boolean {
+function initialFlagFromUrl(name: 'combo' | 'basis' | 'projection' | 'changeBasis'): boolean {
   if (typeof window === 'undefined') return false;
   const params = new URLSearchParams(window.location.search);
   return params.get('scene') === SHARE_SCHEMA_VERSION && params.get(name) === '1';
 }
 
-export function serializeSceneState(state: Pick<PlaygroundState, 'vectors' | 'coefficients' | 'combinationPair' | 'projectionPair' | 'showCombination' | 'showStandardBasis' | 'showProjection'>): URLSearchParams {
+export function serializeSceneState(state: Pick<PlaygroundState, 'vectors' | 'coefficients' | 'combinationPair' | 'projectionPair' | 'basisCoordinateSelection' | 'showCombination' | 'showStandardBasis' | 'showProjection' | 'showBasisCoordinates'>): URLSearchParams {
   const params = new URLSearchParams();
   params.set('scene', SHARE_SCHEMA_VERSION);
   params.set('ids', state.vectors.map((vector) => vector.id).join(','));
@@ -198,9 +240,16 @@ export function serializeSceneState(state: Pick<PlaygroundState, 'vectors' | 'co
   if (state.projectionPair.firstId && state.projectionPair.secondId) {
     params.set('projectionPair', `${state.projectionPair.firstId},${state.projectionPair.secondId}`);
   }
+  if (state.basisCoordinateSelection.firstId && state.basisCoordinateSelection.secondId) {
+    params.set('coordinateBasis', `${state.basisCoordinateSelection.firstId},${state.basisCoordinateSelection.secondId}`);
+  }
+  if (state.basisCoordinateSelection.targetId) {
+    params.set('coordinateTarget', state.basisCoordinateSelection.targetId);
+  }
   if (state.showCombination) params.set('combo', '1');
   if (state.showStandardBasis) params.set('basis', '1');
   if (state.showProjection) params.set('projection', '1');
+  if (state.showBasisCoordinates) params.set('changeBasis', '1');
 
   const hidden = state.vectors.filter((vector) => !vector.visible).map((vector) => vector.id);
   const locked = state.vectors.filter((vector) => vector.locked).map((vector) => vector.id);
@@ -222,9 +271,11 @@ const initialState: PlaygroundState = {
   coefficients: initialCoefficientsFromUrl(),
   combinationPair: initialPairFromUrl('comboPair', initialVectors),
   projectionPair: initialPairFromUrl('projectionPair', initialVectors),
+  basisCoordinateSelection: initialBasisCoordinateSelectionFromUrl(initialVectors),
   showCombination: initialFlagFromUrl('combo'),
   showStandardBasis: initialFlagFromUrl('basis'),
   showProjection: initialFlagFromUrl('projection'),
+  showBasisCoordinates: initialFlagFromUrl('changeBasis'),
   theme: initialTheme(),
 };
 
@@ -246,6 +297,7 @@ function reducer(state: PlaygroundState, action: Action): PlaygroundState {
         vectors,
         combinationPair: reconcilePairSelection(state.combinationPair, vectors),
         projectionPair: reconcilePairSelection(state.projectionPair, vectors),
+        basisCoordinateSelection: reconcileBasisCoordinateSelection(state.basisCoordinateSelection, vectors),
       };
     }
     case 'toggle-locked':
@@ -267,6 +319,7 @@ function reducer(state: PlaygroundState, action: Action): PlaygroundState {
         vectors,
         combinationPair: reconcilePairSelection(state.combinationPair, vectors),
         projectionPair: reconcilePairSelection(state.projectionPair, vectors),
+        basisCoordinateSelection: reconcileBasisCoordinateSelection(state.basisCoordinateSelection, vectors, true),
       };
     }
     case 'remove-vector': {
@@ -276,6 +329,7 @@ function reducer(state: PlaygroundState, action: Action): PlaygroundState {
         vectors,
         combinationPair: reconcilePairSelection(state.combinationPair, vectors),
         projectionPair: reconcilePairSelection(state.projectionPair, vectors),
+        basisCoordinateSelection: reconcileBasisCoordinateSelection(state.basisCoordinateSelection, vectors),
       };
     }
     case 'set-coefficient':
@@ -293,25 +347,44 @@ function reducer(state: PlaygroundState, action: Action): PlaygroundState {
         ...state,
         projectionPair: updatePairSelection(state.projectionPair, action.slot, action.id, state.vectors),
       };
+    case 'set-coordinate-basis-vector': {
+      const pair = updatePairSelection(state.basisCoordinateSelection, action.slot, action.id, state.vectors);
+      return {
+        ...state,
+        basisCoordinateSelection: reconcileBasisCoordinateSelection({
+          ...pair,
+          targetId: state.basisCoordinateSelection.targetId,
+        }, state.vectors),
+      };
+    }
+    case 'set-coordinate-target':
+      return state.vectors.some((vector) => vector.id === action.id && vector.visible)
+        ? { ...state, basisCoordinateSelection: { ...state.basisCoordinateSelection, targetId: action.id } }
+        : state;
     case 'toggle-combination':
       return { ...state, showCombination: !state.showCombination };
     case 'toggle-standard-basis':
       return { ...state, showStandardBasis: !state.showStandardBasis };
     case 'toggle-projection':
       return { ...state, showProjection: !state.showProjection };
+    case 'toggle-basis-coordinates':
+      return { ...state, showBasisCoordinates: !state.showBasisCoordinates };
     case 'load-example': {
       const example = EXAMPLE_SCENES[action.example];
       const vectors = makeDefaultVectors(example.vectors);
       const defaultPair = reconcilePairSelection({ firstId: null, secondId: null }, vectors);
+      const basisCoordinateSelection = reconcileBasisCoordinateSelection({ firstId: null, secondId: null, targetId: null }, vectors, true);
       return {
         ...state,
         vectors,
         coefficients: { ...example.coefficients },
         combinationPair: defaultPair,
         projectionPair: defaultPair,
+        basisCoordinateSelection,
         showCombination: example.showCombination,
         showStandardBasis: example.showStandardBasis,
         showProjection: example.showProjection ?? false,
+        showBasisCoordinates: false,
       };
     }
     case 'set-theme':
@@ -319,15 +392,18 @@ function reducer(state: PlaygroundState, action: Action): PlaygroundState {
     case 'reset': {
       const vectors = makeDefaultVectors();
       const defaultPair = reconcilePairSelection({ firstId: null, secondId: null }, vectors);
+      const basisCoordinateSelection = reconcileBasisCoordinateSelection({ firstId: null, secondId: null, targetId: null }, vectors);
       return {
         ...state,
         vectors,
         coefficients: { a: 1, b: 1 },
         combinationPair: defaultPair,
         projectionPair: defaultPair,
+        basisCoordinateSelection,
         showCombination: false,
         showStandardBasis: false,
         showProjection: false,
+        showBasisCoordinates: false,
       };
     }
     default:
@@ -362,9 +438,12 @@ export function usePlaygroundState() {
       setCoefficient,
       setCombinationVector: (slot: 'first' | 'second', id: string) => dispatch({ type: 'set-combination-vector', slot, id }),
       setProjectionVector: (slot: 'first' | 'second', id: string) => dispatch({ type: 'set-projection-vector', slot, id }),
+      setCoordinateBasisVector: (slot: 'first' | 'second', id: string) => dispatch({ type: 'set-coordinate-basis-vector', slot, id }),
+      setCoordinateTarget: (id: string) => dispatch({ type: 'set-coordinate-target', id }),
       toggleCombination: () => dispatch({ type: 'toggle-combination' }),
       toggleStandardBasis: () => dispatch({ type: 'toggle-standard-basis' }),
       toggleProjection: () => dispatch({ type: 'toggle-projection' }),
+      toggleBasisCoordinates: () => dispatch({ type: 'toggle-basis-coordinates' }),
       loadExample: (example: ExampleName) => dispatch({ type: 'load-example', example }),
       setTheme: (theme: Theme) => dispatch({ type: 'set-theme', theme }),
       reset: () => dispatch({ type: 'reset' }),

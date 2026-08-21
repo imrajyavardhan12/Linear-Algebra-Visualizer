@@ -1,5 +1,6 @@
 export * from './analysis';
 export * from './basis';
+export * from './change-of-basis';
 export * from './format';
 export * from './linear-combination';
 export * from './linear-independence';

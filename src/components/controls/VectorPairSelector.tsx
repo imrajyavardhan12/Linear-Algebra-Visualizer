@@ -11,7 +11,7 @@ interface VectorPairSelectorProps {
   secondLabel: string;
   firstAriaLabel: string;
   secondAriaLabel: string;
-  separator: '+' | '→';
+  separator: '+' | '→' | ',';
   onChange: (slot: 'first' | 'second', id: string) => void;
 }
 

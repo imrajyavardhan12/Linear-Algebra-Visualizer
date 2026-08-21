@@ -12,6 +12,7 @@ The first release focuses on the ideas beginners most often need to see:
 - span as a line or the full plane
 - determinant as parallelogram area
 - dot products, angles, orthogonality, and projection
+- coordinates in a selected ordered basis
 - linear dependence and scalar multiples
 - linear independence
 - basis and dimension of R²
@@ -21,8 +22,8 @@ The first release focuses on the ideas beginners most often need to see:
 ## Product tour
 
 - **Playground** — one focused interactive coordinate plane, vector editors, live status cards, span overlays, combination construction, and deterministic explanations.
-- **Manipulate** — drag endpoints, type coordinates, choose explicit vector pairs for combinations and projections, toggle the standard basis, add a third vector, and lock or hide scene objects.
-- **Share** — copy a versioned scene link that reproduces vectors, selected pairs, coefficients, visibility, locks, and visual toggles.
+- **Manipulate** — drag endpoints, type coordinates, choose explicit vector pairs for combinations, projections, and basis coordinates, toggle the standard basis, add a third vector, and lock or hide scene objects.
+- **Share** — copy a versioned scene link that reproduces vectors, selected pairs and coordinate target, coefficients, visibility, locks, and visual toggles.
 - **Understand** — every important state is shown visually, mathematically, and in plain language without leaving the playground.
 
 The scene supports mouse, touch, keyboard arrow-key nudging, and exact coordinate inputs. Vector colors are paired with labels and text, so color is never the only signal.
@@ -41,7 +42,7 @@ The repository includes `public/og-placeholder.svg` as a lightweight social-prev
 - ESLint 9
 - pnpm for package management
 
-There is no backend and no analytics. The current scene is serializable in a versioned URL such as `/?scene=1&ids=u1%2Cu2&u1=1%2C0&u2=0%2C1&a=2&b=-1&comboPair=u1%2Cu2&projectionPair=u1%2Cu2&combo=1`.
+There is no backend and no analytics. The current scene is serializable in a versioned URL such as `/?scene=1&ids=u1%2Cu2&u1=1%2C0&u2=0%2C1&a=2&b=-1&comboPair=u1%2Cu2&projectionPair=u1%2Cu2&coordinateBasis=u1%2Cu2&coordinateTarget=u1&combo=1`.
 
 ## Quick start
 
@@ -98,6 +99,7 @@ src/
     numerical.ts                  tolerance and finite-number helpers
     linear-independence.ts        rank, dependence, scalar-multiple detection
     linear-combination.ts         combinations and 2×2 solving
+    change-of-basis.ts            ordered-basis coordinates and reconstruction
     projection.ts                 dot product, angle, projection, and rejection
     span.ts                       span dimension/kind
     basis.ts                      basis checks
@@ -123,6 +125,8 @@ docs/ROADMAP.md                   intentionally deferred modules
 - Hidden vectors are excluded from the active analysis but remain saved in the scene.
 - Three or more vectors in R² are dependent, even when they still span the entire plane.
 - A basis of R² is exactly two linearly independent vectors: independent and spanning are shown as separate checks.
+- Basis coordinates are ordered: swapping `(b₁, b₂)` swaps the meaning and order of the coordinate components.
+- Basis-coordinate displays preserve small non-zero values and use `≈` whenever coefficients are rounded for presentation.
 - Projection onto the zero vector is undefined because it has no direction; the zero vector has no geometric angle.
 
 See [the architecture notes](docs/ARCHITECTURE.md) for the derivation and [the roadmap](docs/ROADMAP.md) for R³, transformations, determinants, projections, and eigenvectors.

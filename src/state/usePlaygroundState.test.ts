@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { serializeSceneState, usePlaygroundState, type PlaygroundState } from './usePlaygroundState';
 
-const state: Pick<PlaygroundState, 'vectors' | 'coefficients' | 'combinationPair' | 'projectionPair' | 'showCombination' | 'showStandardBasis' | 'showProjection'> = {
+const state: Pick<PlaygroundState, 'vectors' | 'coefficients' | 'combinationPair' | 'projectionPair' | 'basisCoordinateSelection' | 'showCombination' | 'showStandardBasis' | 'showProjection' | 'showBasisCoordinates'> = {
   vectors: [
     { id: 'u2', label: 'u₂', value: { x: -1, y: 2 }, visible: true, locked: false },
     { id: 'u3', label: 'u₃', value: { x: 3, y: -4 }, visible: false, locked: true },
@@ -10,9 +10,11 @@ const state: Pick<PlaygroundState, 'vectors' | 'coefficients' | 'combinationPair
   coefficients: { a: 2.5, b: -1 },
   combinationPair: { firstId: 'u2', secondId: 'u3' },
   projectionPair: { firstId: 'u3', secondId: 'u2' },
+  basisCoordinateSelection: { firstId: 'u2', secondId: 'u3', targetId: 'u2' },
   showCombination: true,
   showStandardBasis: true,
   showProjection: true,
+  showBasisCoordinates: true,
 };
 
 describe('scene share state', () => {
@@ -27,9 +29,12 @@ describe('scene share state', () => {
     expect(params.get('b')).toBe('-1');
     expect(params.get('comboPair')).toBe('u2,u3');
     expect(params.get('projectionPair')).toBe('u3,u2');
+    expect(params.get('coordinateBasis')).toBe('u2,u3');
+    expect(params.get('coordinateTarget')).toBe('u2');
     expect(params.get('combo')).toBe('1');
     expect(params.get('basis')).toBe('1');
     expect(params.get('projection')).toBe('1');
+    expect(params.get('changeBasis')).toBe('1');
     expect(params.get('hidden')).toBe('u3');
     expect(params.get('locked')).toBe('u3');
     expect(params.has('theme')).toBe(false);
@@ -51,5 +56,45 @@ describe('scene share state', () => {
 
     expect(result.current.state.combinationPair).toEqual({ firstId: 'u3', secondId: 'u2' });
     expect(result.current.state.projectionPair).toEqual({ firstId: 'u2', secondId: 'u3' });
+  });
+
+  it('selects a non-basis target when a third vector is added', () => {
+    const { result } = renderHook(() => usePlaygroundState());
+
+    act(() => result.current.actions.addVector());
+    expect(result.current.state.basisCoordinateSelection).toEqual({
+      firstId: 'u1',
+      secondId: 'u2',
+      targetId: 'u3',
+    });
+
+    act(() => {
+      result.current.actions.setCoordinateBasisVector('first', 'u3');
+      result.current.actions.setCoordinateTarget('u1');
+    });
+    expect(result.current.state.basisCoordinateSelection).toEqual({
+      firstId: 'u3',
+      secondId: 'u2',
+      targetId: 'u1',
+    });
+  });
+
+  it('reconciles hidden or removed coordinate selections to active vectors', () => {
+    const { result } = renderHook(() => usePlaygroundState());
+
+    act(() => result.current.actions.addVector());
+    act(() => result.current.actions.toggleVisible('u1'));
+    expect(result.current.state.basisCoordinateSelection).toEqual({
+      firstId: 'u2',
+      secondId: 'u3',
+      targetId: 'u3',
+    });
+
+    act(() => result.current.actions.removeVector('u3'));
+    expect(result.current.state.basisCoordinateSelection).toEqual({
+      firstId: 'u2',
+      secondId: null,
+      targetId: 'u2',
+    });
   });
 });

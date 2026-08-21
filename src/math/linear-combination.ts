@@ -1,3 +1,4 @@
+import { pairDependence } from './linear-independence';
 import { approximatelyZero, EPSILON } from './numerical';
 import { add, determinant2D, scale } from './vector';
 import type { Vector2 } from './types';
@@ -40,8 +41,7 @@ export function solveTwoVectorCombination(
   tolerance = EPSILON,
 ): { a: number; b: number } | null {
   const determinant = determinant2D(u, v);
-  const scaleFactor = Math.max(1, Math.hypot(u.x, u.y) * Math.hypot(v.x, v.y));
-  if (Math.abs(determinant) <= tolerance * scaleFactor) return null;
+  if (pairDependence(u, v, tolerance, tolerance).kind !== 'independent') return null;
 
   return {
     a: (target.x * v.y - target.y * v.x) / determinant,

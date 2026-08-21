@@ -1,6 +1,6 @@
 import { memo, useMemo, useRef, useState } from 'react';
-import { add, formatNumber, magnitude, normalize, scale } from '../../math';
-import type { LinearCombinationEvaluation, ProjectionEvaluation, Vector2, VectorSetAnalysis } from '../../math';
+import { add, formatAdaptiveNumber, formatNumber, magnitude, normalize, scale, solveTwoVectorCombination } from '../../math';
+import type { BasisCoordinatesEvaluation, LinearCombinationEvaluation, ProjectionEvaluation, Vector2, VectorSetAnalysis } from '../../math';
 
 export interface PlaneVector {
   id: string;
@@ -25,6 +25,14 @@ export interface ProjectionOverlay {
   ontoLabel: string;
 }
 
+export interface BasisCoordinatesOverlay {
+  enabled: boolean;
+  evaluation: BasisCoordinatesEvaluation;
+  firstLabel: string;
+  secondLabel: string;
+  targetLabel: string;
+}
+
 interface VectorPlaneProps {
   vectors: PlaneVector[];
   analysis: VectorSetAnalysis;
@@ -32,6 +40,7 @@ interface VectorPlaneProps {
   showStandardBasis: boolean;
   combination?: CombinationOverlay;
   projection?: ProjectionOverlay;
+  basisCoordinates?: BasisCoordinatesOverlay;
 }
 
 const WIDTH = 760;
@@ -252,6 +261,95 @@ function ProjectionGeometry({ projection }: { projection: ProjectionOverlay }) {
   </g>;
 }
 
+const MAX_BASIS_GRID_LINES_PER_FAMILY = 40;
+
+function sampledIntegerRange(minimum: number, maximum: number): { values: number[]; thinned: boolean } {
+  const first = Math.ceil(minimum - 1e-9);
+  const last = Math.floor(maximum + 1e-9);
+  const count = Math.max(0, last - first + 1);
+  if (count <= MAX_BASIS_GRID_LINES_PER_FAMILY) {
+    return { values: Array.from({ length: count }, (_, index) => first + index), thinned: false };
+  }
+
+  const values = new Set<number>();
+  for (let index = 0; index < MAX_BASIS_GRID_LINES_PER_FAMILY; index += 1) {
+    values.add(Math.round(first + (index * (last - first)) / (MAX_BASIS_GRID_LINES_PER_FAMILY - 1)));
+  }
+  if (first <= 0 && last >= 0) values.add(0);
+  return { values: [...values].sort((left, right) => left - right), thinned: true };
+}
+
+function BasisCoordinateGeometry({ basisCoordinates }: { basisCoordinates: BasisCoordinatesOverlay }) {
+  const { evaluation, firstLabel, secondLabel, targetLabel } = basisCoordinates;
+  const noteX = WIDTH / 2 - 112;
+  const noteY = 31;
+
+  if (!evaluation.isBasis || !evaluation.coordinates || !evaluation.firstComponent || !evaluation.reconstructed) {
+    return <g className="basis-coordinate-overlay" role="group" aria-label={`${firstLabel} and ${secondLabel} do not form a basis`}>
+      <g className="basis-coordinate-note"><rect x={noteX} y={noteY} width="224" height="23" rx="5" /><text x={WIDTH / 2} y={noteY + 15} textAnchor="middle">basis grid unavailable: directions are dependent</text></g>
+    </g>;
+  }
+
+  const { first, second } = evaluation.basis;
+  const visibleCorners: Vector2[] = [
+    { x: (COMBINATION_PADDING - ORIGIN.x) / UNIT, y: (ORIGIN.y - COMBINATION_PADDING) / UNIT },
+    { x: (WIDTH - COMBINATION_PADDING - ORIGIN.x) / UNIT, y: (ORIGIN.y - COMBINATION_PADDING) / UNIT },
+    { x: (COMBINATION_PADDING - ORIGIN.x) / UNIT, y: (ORIGIN.y - (HEIGHT - COMBINATION_PADDING)) / UNIT },
+    { x: (WIDTH - COMBINATION_PADDING - ORIGIN.x) / UNIT, y: (ORIGIN.y - (HEIGHT - COMBINATION_PADDING)) / UNIT },
+  ];
+  const cornerCoordinates = visibleCorners
+    .map((corner) => solveTwoVectorCombination(first, second, corner))
+    .filter((coordinates): coordinates is { a: number; b: number } => coordinates !== null);
+  const firstMinimum = Math.min(...cornerCoordinates.map((coordinates) => coordinates.a));
+  const firstMaximum = Math.max(...cornerCoordinates.map((coordinates) => coordinates.a));
+  const secondMinimum = Math.min(...cornerCoordinates.map((coordinates) => coordinates.b));
+  const secondMaximum = Math.max(...cornerCoordinates.map((coordinates) => coordinates.b));
+  const firstIndices = sampledIntegerRange(firstMinimum, firstMaximum);
+  const secondIndices = sampledIntegerRange(secondMinimum, secondMaximum);
+  const gridWasThinned = firstIndices.thinned || secondIndices.thinned;
+  const gridLines: Array<{ key: string; segment: ClippedSegment; axis: boolean }> = [];
+
+  for (const index of firstIndices.values) {
+    const firstOffset = scale(first, index);
+    const firstFamily = clipSegmentToPlane(
+      toScreen(add(firstOffset, scale(second, secondMinimum - 1))),
+      toScreen(add(firstOffset, scale(second, secondMaximum + 1))),
+    );
+    if (firstFamily) gridLines.push({ key: `first-${index}`, segment: firstFamily, axis: index === 0 });
+  }
+
+  for (const index of secondIndices.values) {
+    const secondOffset = scale(second, index);
+    const secondFamily = clipSegmentToPlane(
+      toScreen(add(secondOffset, scale(first, firstMinimum - 1))),
+      toScreen(add(secondOffset, scale(first, firstMaximum + 1))),
+    );
+    if (secondFamily) gridLines.push({ key: `second-${index}`, segment: secondFamily, axis: index === 0 });
+  }
+
+  const coordinatesAreRounded = Number(formatAdaptiveNumber(evaluation.coordinates.x)) !== evaluation.coordinates.x
+    || Number(formatAdaptiveNumber(evaluation.coordinates.y)) !== evaluation.coordinates.y;
+  const coordinateRelation = coordinatesAreRounded ? 'approximately' : 'equals';
+  const coordinateSymbol = coordinatesAreRounded ? '≈' : '=';
+  const firstComponentPoint = toScreen(evaluation.firstComponent);
+  const targetPoint = toScreen(evaluation.reconstructed);
+  const firstComponentSegment = clipSegmentToPlane(ORIGIN, firstComponentPoint);
+  const secondComponentSegment = clipSegmentToPlane(firstComponentPoint, targetPoint);
+  const targetLabelPosition = labelPosition(clampScreenPoint(targetPoint), 24);
+
+  return <g className="basis-coordinate-overlay" role="group" aria-label={`${targetLabel} ${coordinateRelation} ${formatAdaptiveNumber(evaluation.coordinates.x)}, ${formatAdaptiveNumber(evaluation.coordinates.y)} in ordered basis ${firstLabel}, ${secondLabel}`}>
+    <title>{targetLabel} in basis ({firstLabel}, {secondLabel}) {coordinateRelation} ({formatAdaptiveNumber(evaluation.coordinates.x)}, {formatAdaptiveNumber(evaluation.coordinates.y)})</title>
+    <g className="basis-coordinate-grid" aria-hidden="true">
+      {gridLines.map(({ key, segment, axis }) => <line key={key} className={`basis-grid-line${axis ? ' is-axis' : ''}`} x1={segment.start.x} y1={segment.start.y} x2={segment.end.x} y2={segment.end.y} />)}
+    </g>
+    {firstComponentSegment && <line className="basis-coordinate-step basis-coordinate-step-first" x1={firstComponentSegment.start.x} y1={firstComponentSegment.start.y} x2={firstComponentSegment.end.x} y2={firstComponentSegment.end.y} />}
+    {secondComponentSegment && <line className="basis-coordinate-step basis-coordinate-step-second" x1={secondComponentSegment.start.x} y1={secondComponentSegment.start.y} x2={secondComponentSegment.end.x} y2={secondComponentSegment.end.y} />}
+    <text className="basis-coordinate-label" x={targetLabelPosition.x} y={targetLabelPosition.y} textAnchor={targetLabelPosition.anchor}>[{targetLabel}]₍B₎ {coordinateSymbol} ({formatAdaptiveNumber(evaluation.coordinates.x)}, {formatAdaptiveNumber(evaluation.coordinates.y)})</text>
+    <g className="basis-coordinate-note"><rect x={noteX} y={noteY} width="224" height="23" rx="5" /><text x={WIDTH / 2} y={noteY + 15} textAnchor="middle">B = ({firstLabel}, {secondLabel}) · coordinates count basis steps</text></g>
+    {gridWasThinned && <g className="basis-coordinate-note basis-grid-density-note"><rect x={noteX} y={noteY + 28} width="224" height="23" rx="5" /><text x={WIDTH / 2} y={noteY + 43} textAnchor="middle">fine lattice sampled for readability</text></g>}
+  </g>;
+}
+
 function labelPosition(point: { x: number; y: number }, verticalOffset: number): { x: number; y: number; anchor: 'start' | 'end' } {
   const nearRightEdge = point.x > WIDTH - 150;
   return {
@@ -325,6 +423,7 @@ export const VectorPlane = memo(function VectorPlane({
   showStandardBasis,
   combination,
   projection,
+  basisCoordinates,
 }: VectorPlaneProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const dragRef = useRef<{ id: string; pointerId: number } | null>(null);
@@ -411,6 +510,7 @@ export const VectorPlane = memo(function VectorPlane({
           {GRID_Y.map((value) => { const point = toScreen({ x: 0, y: value }); return <line key={`y-${value}`} x1="20" y1={point.y} x2={WIDTH - 20} y2={point.y} />; })}
         </g>
         <SpanOverlay vectors={visibleVectors} analysis={analysis} />
+        {basisCoordinates?.enabled && <BasisCoordinateGeometry basisCoordinates={basisCoordinates} />}
         <DeterminantAreaOverlay vectors={visibleVectors} analysis={analysis} />
         {projection?.enabled && <ProjectionGeometry projection={projection} />}
         {showStandardBasis && <StandardBasisOverlay />}
