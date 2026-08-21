@@ -69,7 +69,7 @@ Rendering layers are ordered deliberately:
 7. original vectors and accessible handles
 8. origin marker
 
-The combination construction consumes the same `LinearCombinationEvaluation` object as the control panel. The projection construction consumes one shared `ProjectionEvaluation` for its dot product, angle, projection vector, perpendicular rejection, and right-angle marker. Off-canvas endpoints are clamped to the plane edge and explicitly marked rather than silently disappearing. When exactly two vectors are active, a determinant overlay shows their parallelogram and `|det(u₁, u₂)|` as geometric area.
+The combination construction consumes the same `LinearCombinationEvaluation` object as the control panel. The projection construction consumes one shared `ProjectionEvaluation` for its dot product, angle, projection vector, perpendicular rejection, and right-angle marker. Projection and drop segments are clipped against the visible plane rectangle, so wholly off-screen segments are omitted while intersecting segments end at their true boundary point. Off-canvas endpoints are explicitly marked and paired with a continuation label rather than silently disappearing. When exactly two vectors are active, a determinant overlay shows their parallelogram and `|det(u₁, u₂)|` as geometric area.
 
 SVG is appropriate for the current small scene and keeps labels, focus, and hit areas inspectable. A future R³ renderer can implement a parallel scene interface without changing the math or state model.
 

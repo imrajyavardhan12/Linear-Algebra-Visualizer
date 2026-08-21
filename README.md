@@ -129,7 +129,7 @@ See [the architecture notes](docs/ARCHITECTURE.md) for the derivation and [the r
 
 ## Accessibility and responsive behavior
 
-The plane has an accessible SVG label, keyboard-focusable arrowheads, arrow-key nudging, visible focus states, and coordinate inputs for users who cannot or do not want to drag. The interface stacks the visualization before controls on small screens, keeps touch targets generous, and supports light/dark themes.
+The plane has an accessible SVG label, keyboard-focusable arrowheads, arrow-key nudging, visible focus states, and coordinate inputs for users who cannot or do not want to drag. The interface stacks the visualization before controls on small screens, keeps touch targets generous, and supports light/dark themes. Playwright runs automated Axe checks against default and expanded scenes in both themes; manual keyboard and screen-reader checks remain part of release QA.
 
 ## Deployment
 

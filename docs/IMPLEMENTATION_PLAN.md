@@ -18,6 +18,7 @@
 6. **Explanation-first UX** — deterministic status cards, basis checks, plain-language state explanations, and a contextual theorem prompt inside the playground.
 7. **Production polish** — responsive layout, themes, keyboard/touch affordances, metadata, README, architecture/roadmap docs, unit/component/E2E coverage.
 8. **Explicit relationship pairs** — accessible stable-ID selectors independently choose combination inputs and projection source/target, with deterministic fallback and URL persistence.
+9. **Production accessibility and overflow hardening** — automated Axe checks cover default and expanded scenes, WCAG AA contrast tokens are enforced in both themes, and clipped projection geometry uses true segment clipping, edge markers, and explicit continuation labels.
 
 ## Intentionally deferred
 
