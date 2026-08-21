@@ -108,6 +108,51 @@ function clampScreenPoint(point: { x: number; y: number }): { x: number; y: numb
   };
 }
 
+interface ClippedSegment {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+  startClipped: boolean;
+  endClipped: boolean;
+}
+
+function clipSegmentToPlane(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): ClippedSegment | null {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  const boundaries = [
+    { p: -deltaX, q: start.x - COMBINATION_PADDING },
+    { p: deltaX, q: WIDTH - COMBINATION_PADDING - start.x },
+    { p: -deltaY, q: start.y - COMBINATION_PADDING },
+    { p: deltaY, q: HEIGHT - COMBINATION_PADDING - start.y },
+  ];
+  let startRatio = 0;
+  let endRatio = 1;
+
+  for (const { p, q } of boundaries) {
+    if (Math.abs(p) <= 1e-9) {
+      if (q < 0) return null;
+      continue;
+    }
+    const ratio = q / p;
+    if (p < 0) {
+      if (ratio > endRatio) return null;
+      startRatio = Math.max(startRatio, ratio);
+    } else {
+      if (ratio < startRatio) return null;
+      endRatio = Math.min(endRatio, ratio);
+    }
+  }
+
+  return {
+    start: { x: start.x + deltaX * startRatio, y: start.y + deltaY * startRatio },
+    end: { x: start.x + deltaX * endRatio, y: start.y + deltaY * endRatio },
+    startClipped: startRatio > 1e-9,
+    endClipped: endRatio < 1 - 1e-9,
+  };
+}
+
 function DeterminantAreaOverlay({ vectors, analysis }: { vectors: PlaneVector[]; analysis: VectorSetAnalysis }) {
   if (vectors.length !== 2 || analysis.determinant === null) return null;
   const first = vectors[0];
@@ -174,23 +219,35 @@ function ProjectionGeometry({ projection }: { projection: ProjectionOverlay }) {
     </g>;
   }
 
-  const sourcePoint = clampScreenPoint(toScreen(source));
-  const projectedPoint = clampScreenPoint(toScreen(projected));
+  const rawSourcePoint = toScreen(source);
+  const rawProjectedPoint = toScreen(projected);
   const projectedIsZero = magnitude(projected) <= 1e-8;
   const sourceIsZero = magnitude(source) <= 1e-8;
+  const projectionSegment = projectedIsZero ? null : clipSegmentToPlane(ORIGIN, rawProjectedPoint);
+  const dropSegment = sourceIsZero ? null : clipSegmentToPlane(rawProjectedPoint, rawSourcePoint);
+  const projectedPoint = projectionSegment?.end ?? clampScreenPoint(rawProjectedPoint);
+  const geometryIsClipped = isOutsidePlane(rawProjectedPoint) || isOutsidePlane(rawSourcePoint)
+    || Boolean(dropSegment?.startClipped || dropSegment?.endClipped);
   const arc = angleArcPath(onto, source, 46);
-  const rightAngle = rightAnglePath(projectedPoint, projected, rejection);
+  const rightAngle = !isOutsidePlane(rawProjectedPoint)
+    ? rightAnglePath(projectedPoint, projected, rejection)
+    : null;
   const projectedLabel = labelPosition(projectedPoint, -14);
   const angleText = evaluation.angleRadians === null ? 'undefined' : `${formatNumber(evaluation.angleRadians * (180 / Math.PI))}°`;
+  const ariaLabel = `Projection of ${sourceLabel} onto ${ontoLabel}${geometryIsClipped ? ', geometry continues outside the visible plane' : ''}`;
 
-  return <g className="projection-overlay" role="group" aria-label={`Projection of ${sourceLabel} onto ${ontoLabel}`}>
+  return <g className="projection-overlay" role="group" aria-label={ariaLabel}>
     {projectedIsZero
       ? <circle className="projection-zero-marker" cx={ORIGIN.x} cy={ORIGIN.y} r="5" />
-      : <line className="projection-vector" x1={ORIGIN.x} y1={ORIGIN.y} x2={projectedPoint.x} y2={projectedPoint.y} markerEnd="url(#arrow-projection)" />}
-    {!sourceIsZero && <line className="projection-drop" x1={projectedPoint.x} y1={projectedPoint.y} x2={sourcePoint.x} y2={sourcePoint.y} />}
+      : projectionSegment && <line className={`projection-vector${projectionSegment.endClipped ? ' is-clipped' : ''}`} x1={projectionSegment.start.x} y1={projectionSegment.start.y} x2={projectionSegment.end.x} y2={projectionSegment.end.y} markerEnd="url(#arrow-projection)" />}
+    {projectionSegment?.endClipped && <circle className="projection-overflow-marker" cx={projectionSegment.end.x} cy={projectionSegment.end.y} r="6" />}
+    {dropSegment && <line className={`projection-drop${dropSegment.startClipped || dropSegment.endClipped ? ' is-clipped' : ''}`} x1={dropSegment.start.x} y1={dropSegment.start.y} x2={dropSegment.end.x} y2={dropSegment.end.y} />}
+    {dropSegment?.startClipped && <circle className="projection-overflow-marker" cx={dropSegment.start.x} cy={dropSegment.start.y} r="6" />}
+    {dropSegment?.endClipped && <circle className="projection-overflow-marker" cx={dropSegment.end.x} cy={dropSegment.end.y} r="6" />}
     {rightAngle && <path className="projection-right-angle" d={rightAngle} />}
     {arc && <path className="projection-angle" d={arc} />}
     <text className="projection-label" x={projectedLabel.x} y={projectedLabel.y} textAnchor={projectedLabel.anchor}>proj₍{ontoLabel}₎ {sourceLabel}</text>
+    {geometryIsClipped && <g className="projection-overflow-note"><rect x={noteX} y={noteY - 29} width="210" height="23" rx="5" /><text x={noteX + 105} y={noteY - 14} textAnchor="middle">projection continues outside view</text></g>}
     <g className="projection-note"><rect x={noteX} y={noteY} width="210" height="23" rx="5" /><text x={noteX + 105} y={noteY + 15} textAnchor="middle">dot = {formatNumber(evaluation.dot)} · θ = {angleText}</text></g>
   </g>;
 }

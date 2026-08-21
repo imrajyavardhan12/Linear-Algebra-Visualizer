@@ -108,6 +108,20 @@ test('reveals dot product, angle, and projection geometry', async ({ page }) => 
   await expect(page.getByText('Projection of u₁ onto u₂')).toBeVisible();
 });
 
+test('marks projection geometry that continues beyond the visible plane', async ({ page }) => {
+  await page.goto('/?scene=1&ids=u1%2Cu2&u1=12%2C12&u2=1%2C0&projection=1');
+
+  await expect(page.locator('.projection-overflow-note')).toContainText('projection continues outside view');
+  await expect(page.locator('.projection-overflow-marker')).toHaveCount(1);
+  await expect(page.locator('.projection-drop')).toHaveCount(0);
+  await expect(page.locator('.projection-overlay')).toHaveAttribute('aria-label', /continues outside the visible plane/);
+
+  await page.getByRole('spinbutton', { name: 'u₁ x coordinate' }).fill('4');
+  await expect(page.locator('.projection-drop')).toHaveCount(1);
+  await expect(page.locator('.projection-drop')).toHaveClass(/is-clipped/);
+  await expect(page.locator('.projection-overflow-marker')).toHaveCount(1);
+});
+
 test('shows the complete worked example for negative coefficients', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('switch', { name: 'Show linear combination' }).click();
@@ -217,13 +231,18 @@ test('rejects hostile scene content and avoids third-party runtime requests', as
   expect(policy).toContain("object-src 'none'");
 });
 
-test('keeps the primary playground layout visually stable', async ({ page }) => {
+test('keeps the primary playground layout visually stable', async ({ page }, testInfo) => {
   await page.goto('/');
   await page.evaluate(() => document.fonts.ready);
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('A fixed viewport is required for visual regression testing');
+  const screenshotHeight = testInfo.project.name === 'mobile' ? 2700 : 2000;
+
   await expect(page).toHaveScreenshot('playground.png', {
     animations: 'disabled',
     caret: 'hide',
-    fullPage: true,
+    clip: { x: 0, y: 0, width: viewport.width, height: screenshotHeight },
+    maxDiffPixelRatio: testInfo.project.name === 'mobile' ? 0.055 : 0.02,
   });
 });
 

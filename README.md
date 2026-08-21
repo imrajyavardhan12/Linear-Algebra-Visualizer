@@ -2,6 +2,8 @@
 
 > Learn linear algebra by manipulating it.
 
+**Live app:** [linear-algebra-visualizer.pages.dev](https://linear-algebra-visualizer.pages.dev/)
+
 Linear Algebra Playground is a client-side interactive learning tool for building intuition around vectors in **R²**. Drag arrowheads, edit exact coordinates, change coefficients, and watch the geometry, equations, and explanations stay synchronized.
 
 The first release focuses on the ideas beginners most often need to see:
@@ -127,9 +129,11 @@ See [the architecture notes](docs/ARCHITECTURE.md) for the derivation and [the r
 
 ## Accessibility and responsive behavior
 
-The plane has an accessible SVG label, keyboard-focusable arrowheads, arrow-key nudging, visible focus states, and coordinate inputs for users who cannot or do not want to drag. The interface stacks the visualization before controls on small screens, keeps touch targets generous, and supports light/dark themes.
+The plane has an accessible SVG label, keyboard-focusable arrowheads, arrow-key nudging, visible focus states, and coordinate inputs for users who cannot or do not want to drag. The interface stacks the visualization before controls on small screens, keeps touch targets generous, and supports light/dark themes. Playwright runs automated Axe checks against default and expanded scenes in both themes; manual keyboard and screen-reader checks remain part of release QA.
 
 ## Deployment
+
+The production site is deployed on Cloudflare Pages at [linear-algebra-visualizer.pages.dev](https://linear-algebra-visualizer.pages.dev/).
 
 The app is a static Vite build. Deploy the `dist/` directory to Vercel, Netlify, Cloudflare Pages, GitHub Pages (with the appropriate SPA fallback), or any static host:
 
@@ -145,6 +149,10 @@ The application ships a restrictive browser CSP and self-hosted fonts, so it mak
 ## Contributing
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change. Mathematical behavior belongs in pure, tested modules; React components should consume analysis results rather than reimplementing linear algebra.
+
+## License
+
+Released under the [MIT License](LICENSE).
 
 ## Roadmap
 
