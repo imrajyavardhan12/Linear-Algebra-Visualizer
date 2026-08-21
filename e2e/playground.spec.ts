@@ -275,6 +275,21 @@ test('quick scenes place the user at meaningful mathematical states', async ({ p
   await expect(page.getByText('One vector is a combination of the others.')).toBeVisible();
 });
 
+test('publishes complete social preview metadata', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', 'https://linear-algebra-visualizer.pages.dev/');
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://linear-algebra-visualizer.pages.dev/og-image.png');
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
+  const dimensions = await page.evaluate(async () => {
+    const image = new Image();
+    image.src = '/og-image.png';
+    await image.decode();
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  });
+  expect(dimensions).toEqual({ width: 1200, height: 630 });
+});
+
 test('rejects hostile scene content and avoids third-party runtime requests', async ({ page }) => {
   const thirdPartyRequests: string[] = [];
   page.on('request', (request) => {

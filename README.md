@@ -30,7 +30,7 @@ The scene supports mouse, touch, keyboard arrow-key nudging, and exact coordinat
 
 ## Screenshots
 
-The repository includes `public/og-placeholder.svg` as a lightweight social-preview placeholder. The live coordinate plane is intentionally rendered by the application so the preview stays crisp at any size.
+The repository includes a 1200×630 product preview at `public/og-image.png`, used by Open Graph and large Twitter/X cards. The application itself renders the live coordinate plane as responsive SVG.
 
 ## Stack
 
