@@ -5,6 +5,7 @@ import {
   basisChecks,
   determinant2D,
   dot,
+  evaluateBasisCoordinates,
   evaluateLinearCombination,
   formsBasisOfR2,
   linearlyDependent,
@@ -14,6 +15,7 @@ import {
   pairDependence,
   angleBetween,
   evaluateProjection,
+  formatAdaptiveNumber,
   projectOnto,
   rankOfVectors,
   scalarMultipleFactor,
@@ -32,6 +34,11 @@ describe('vector operations', () => {
     expect(normalize({ x: 3, y: 4 }).x).toBeCloseTo(0.6);
     expect(normalize({ x: 3, y: 4 }).y).toBeCloseTo(0.8);
     expect(dot({ x: 1, y: 2 }, { x: 3, y: 4 })).toBe(11);
+  });
+
+  it('preserves small non-zero values with adaptive display precision', () => {
+    expect(formatAdaptiveNumber(0.004)).toBe('0.004');
+    expect(formatAdaptiveNumber(1 / 3)).toBe('0.3333');
   });
 
   it('keeps the zero vector safe when normalizing', () => {
@@ -129,6 +136,42 @@ describe('dependence, span, and basis', () => {
   });
 });
 
+describe('change of basis', () => {
+  it('expresses a target in an ordered basis and reconstructs it', () => {
+    const evaluation = evaluateBasisCoordinates(
+      { x: 2, y: 1 },
+      { x: -1, y: 2 },
+      { x: 5, y: 0 },
+    );
+
+    expect(evaluation.isBasis).toBe(true);
+    expect(evaluation.coordinates).toEqual({ x: 2, y: -1 });
+    expect(evaluation.reconstructed).toEqual({ x: 5, y: 0 });
+  });
+
+  it('treats basis order as coordinate order', () => {
+    const evaluation = evaluateBasisCoordinates(
+      { x: 0, y: 1 },
+      { x: 1, y: 0 },
+      { x: 3, y: -2 },
+    );
+
+    expect(evaluation.coordinates).toEqual({ x: -2, y: 3 });
+  });
+
+  it('rejects dependent directions as a coordinate basis', () => {
+    const evaluation = evaluateBasisCoordinates(
+      { x: 1, y: 2 },
+      { x: 2, y: 4 },
+      { x: 3, y: 1 },
+    );
+
+    expect(evaluation.isBasis).toBe(false);
+    expect(evaluation.coordinates).toBeNull();
+    expect(evaluation.reconstructed).toBeNull();
+  });
+});
+
 describe('linear combinations', () => {
   it('evaluates scaled components and the resultant from one shared calculation', () => {
     const evaluation = evaluateLinearCombination(
@@ -157,6 +200,14 @@ describe('linear combinations', () => {
   it('solves coefficients for a spanning pair', () => {
     expect(solveTwoVectorCombination({ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 3, y: -2 })).toEqual({ a: 3, b: -2 });
     expect(solveTwoVectorCombination({ x: 2, y: 1 }, { x: -1, y: 2 }, { x: 5, y: 0 })).toEqual({ a: 2, b: -1 });
+  });
+
+  it('solves scale-equivalent small bases consistently', () => {
+    expect(solveTwoVectorCombination(
+      { x: 0.01, y: 0 },
+      { x: 0.01, y: 0.00000001 },
+      { x: 0.02, y: -0.00000001 },
+    )).toEqual({ a: 3, b: -1 });
   });
 
   it('returns null for a pair that only spans a line', () => {

@@ -9,7 +9,7 @@ The R² playground is intentionally the V1 focus. These are the next modules, in
 - [x] Mark clipped projection geometry with accurate edge intersections and continuation labels.
 - [x] Add automated WCAG A/AA checks for default and expanded scenes.
 - [x] Add a determinant/area visualization showing the parallelogram area scale.
-- [ ] Add an in-place change-of-basis exploration using two selectable bases.
+- [x] Add an in-place change-of-basis exploration with an ordered selectable basis and target vector.
 - [x] Add a versioned URL copy/share affordance.
 - [ ] Add a small in-place example gallery.
 - [x] Improve touch drag affordances with a visible active-handle state and larger hit target.

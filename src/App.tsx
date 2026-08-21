@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { BasisCoordinatesControls } from './components/controls/BasisCoordinatesControls';
 import { CoefficientControls } from './components/controls/CoefficientControls';
 import { ProjectionControls } from './components/ProjectionControls';
 import { SceneControls } from './components/controls/SceneControls';
@@ -9,7 +10,7 @@ import { Legend } from './components/Legend';
 import { StatusPanel } from './components/StatusPanel';
 import { VectorPlane, type PlaneVector } from './components/visualization/VectorPlane';
 import { WorkspaceFooter } from './components/WorkspaceFooter';
-import { analyzeVectorSet, evaluateLinearCombination, evaluateProjection, formatNumber } from './math';
+import { analyzeVectorSet, evaluateBasisCoordinates, evaluateLinearCombination, evaluateProjection, formatNumber } from './math';
 import { vectorVisualDefinition } from './scene';
 import { usePlaygroundState } from './state/usePlaygroundState';
 
@@ -77,6 +78,22 @@ function App() {
       ontoLabel: projectionTargetVector.label,
     }
     : undefined;
+  const firstCoordinateBasisVector = activeVectors.find((vector) => vector.id === state.basisCoordinateSelection.firstId);
+  const secondCoordinateBasisVector = activeVectors.find((vector) => vector.id === state.basisCoordinateSelection.secondId);
+  const coordinateTargetVector = activeVectors.find((vector) => vector.id === state.basisCoordinateSelection.targetId);
+  const basisCoordinateEvaluation = useMemo(() => {
+    if (!firstCoordinateBasisVector || !secondCoordinateBasisVector || !coordinateTargetVector) return null;
+    return evaluateBasisCoordinates(firstCoordinateBasisVector.value, secondCoordinateBasisVector.value, coordinateTargetVector.value);
+  }, [firstCoordinateBasisVector, secondCoordinateBasisVector, coordinateTargetVector]);
+  const basisCoordinatesOverlay = basisCoordinateEvaluation && firstCoordinateBasisVector && secondCoordinateBasisVector && coordinateTargetVector
+    ? {
+      enabled: state.showBasisCoordinates,
+      evaluation: basisCoordinateEvaluation,
+      firstLabel: firstCoordinateBasisVector.label,
+      secondLabel: secondCoordinateBasisVector.label,
+      targetLabel: coordinateTargetVector.label,
+    }
+    : undefined;
   const planeVectors: PlaneVector[] = state.vectors.map((vector, index) => ({
     ...vector,
     color: vectorVisualDefinition(vector.id, index).color,
@@ -98,8 +115,8 @@ function App() {
       </div>
       <div className="workspace-grid">
         <section className="visualization-column" aria-label="Vector visualization">
-          <VectorPlane vectors={planeVectors} analysis={analysis} onChange={actions.setVector} showStandardBasis={state.showStandardBasis} combination={combinationOverlay} projection={projectionOverlay} />
-          <div className="visualization-underbar"><Legend vectors={legendVectors} showCombination={state.showCombination && combinationEvaluation !== null} showProjection={state.showProjection && projectionEvaluation !== null} /><div className="plane-status-pills"><span><i className="pulse-dot" /> {analysis.spanKind === 'plane' ? 'Full plane span' : analysis.spanKind === 'line' ? 'Line span' : 'No span yet'}</span><span className="coordinate-readout">det <strong>{analysis.determinant === null ? '—' : formatNumber(analysis.determinant)}</strong></span></div></div>
+          <VectorPlane vectors={planeVectors} analysis={analysis} onChange={actions.setVector} showStandardBasis={state.showStandardBasis} combination={combinationOverlay} projection={projectionOverlay} basisCoordinates={basisCoordinatesOverlay} />
+          <div className="visualization-underbar"><Legend vectors={legendVectors} showCombination={state.showCombination && combinationEvaluation !== null} showProjection={state.showProjection && projectionEvaluation !== null} showBasisCoordinates={state.showBasisCoordinates && basisCoordinateEvaluation?.isBasis === true} /><div className="plane-status-pills"><span><i className="pulse-dot" /> {analysis.spanKind === 'plane' ? 'Full plane span' : analysis.spanKind === 'line' ? 'Line span' : 'No span yet'}</span><span className="coordinate-readout">det <strong>{analysis.determinant === null ? '—' : formatNumber(analysis.determinant)}</strong></span></div></div>
           <div className="intuition-callout"><span className="callout-icon">✦</span><div><strong>Make a theorem visible.</strong><p>Try placing u₂ on the line of u₁, then pull it away. Watch a line open into a plane.</p></div></div>
         </section>
         <aside className="control-rail" aria-label="Vector controls and mathematical explanation">
@@ -107,6 +124,7 @@ function App() {
           <VectorEditor vectors={state.vectors} onChange={actions.setVector} onToggleVisible={actions.toggleVisible} onToggleLocked={actions.toggleLocked} onAdd={actions.addVector} onRemove={actions.removeVector} />
           <CoefficientControls coefficients={state.coefficients} evaluation={combinationEvaluation} enabled={state.showCombination} firstLabel={firstCombinationVector?.label} secondLabel={secondCombinationVector?.label} pairOptions={pairOptions} firstId={firstCombinationVector?.id} secondId={secondCombinationVector?.id} onPairChange={actions.setCombinationVector} onToggle={actions.toggleCombination} onChange={actions.setCoefficient} />
           <ProjectionControls evaluation={projectionEvaluation} enabled={state.showProjection} sourceLabel={projectionSourceVector?.label} ontoLabel={projectionTargetVector?.label} pairOptions={pairOptions} sourceId={projectionSourceVector?.id} ontoId={projectionTargetVector?.id} onPairChange={actions.setProjectionVector} onToggle={actions.toggleProjection} />
+          <BasisCoordinatesControls evaluation={basisCoordinateEvaluation} enabled={state.showBasisCoordinates} options={pairOptions} firstId={firstCoordinateBasisVector?.id} secondId={secondCoordinateBasisVector?.id} targetId={coordinateTargetVector?.id} firstLabel={firstCoordinateBasisVector?.label} secondLabel={secondCoordinateBasisVector?.label} targetLabel={coordinateTargetVector?.label} onPairChange={actions.setCoordinateBasisVector} onTargetChange={actions.setCoordinateTarget} onToggle={actions.toggleBasisCoordinates} />
           <SceneControls showStandardBasis={state.showStandardBasis} onToggleStandardBasis={actions.toggleStandardBasis} onReset={actions.reset} onLoadExample={actions.loadExample} theme={state.theme} onToggleTheme={() => actions.setTheme(state.theme === 'dark' ? 'light' : 'dark')} />
           <ExplanationPanel vectors={values} names={names} analysis={analysis} />
         </aside>

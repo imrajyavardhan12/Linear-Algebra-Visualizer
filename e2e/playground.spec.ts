@@ -108,6 +108,71 @@ test('reveals dot product, angle, and projection geometry', async ({ page }) => 
   await expect(page.getByText('Projection of u₁ onto u₂')).toBeVisible();
 });
 
+test('expresses a vector in an ordered basis and draws its coordinate grid', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Three-vector relation' }).click();
+  await page.getByRole('switch', { name: 'Show change of basis' }).click();
+
+  await expect(page.locator('.basis-coordinate-formula')).toHaveText('[u₃]B = (1, 1)');
+  await expect(page.locator('.basis-coordinate-grid')).toBeVisible();
+  expect(await page.locator('.basis-grid-line').count()).toBeGreaterThan(0);
+
+  await page.getByRole('combobox', { name: 'First basis vector' }).selectOption('u2');
+  await page.getByRole('combobox', { name: 'Second basis vector' }).selectOption('u3');
+  await page.getByRole('combobox', { name: 'Vector to express in basis' }).selectOption('u1');
+
+  await expect(page.locator('.basis-coordinate-formula')).toHaveText('[u₁]B = (-1, 1)');
+  await expect(page).toHaveURL(/coordinateBasis=u2%2Cu3/);
+  await expect(page).toHaveURL(/coordinateTarget=u1/);
+  await expect(page).toHaveURL(/changeBasis=1/);
+
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'First basis vector' })).toHaveValue('u2');
+  await expect(page.getByRole('combobox', { name: 'Vector to express in basis' })).toHaveValue('u1');
+});
+
+test('sanitizes malformed or inactive basis-coordinate URL selections', async ({ page }) => {
+  await page.goto('/?scene=1&ids=u1%2Cu2&u1=1%2C0&u2=0%2C1&coordinateBasis=u1%2Cunsafe&coordinateTarget=u3&changeBasis=1');
+
+  await expect(page.getByRole('combobox', { name: 'First basis vector' })).toHaveValue('u1');
+  await expect(page.getByRole('combobox', { name: 'Second basis vector' })).toHaveValue('u2');
+  await expect(page.getByRole('combobox', { name: 'Vector to express in basis' })).toHaveValue('u1');
+  await expect(page).toHaveURL(/coordinateBasis=u1%2Cu2/);
+  await expect(page).toHaveURL(/coordinateTarget=u1/);
+});
+
+test('bounds fine, skewed, and near-dependent basis grids', async ({ page }) => {
+  const bases = [
+    ['0.1,0', '0,0.1'],
+    ['12,0', '12,0.1'],
+    ['1,0', '1,0.000001'],
+  ];
+
+  for (const [first, second] of bases) {
+    await page.goto(`/?scene=1&ids=u1%2Cu2&u1=${encodeURIComponent(first!)}&u2=${encodeURIComponent(second!)}&coordinateBasis=u1%2Cu2&coordinateTarget=u1&changeBasis=1`);
+    await expect(page.locator('.basis-coordinate-grid')).toBeVisible();
+    await expect(page.locator('.basis-grid-density-note')).toBeVisible();
+    const lines = page.locator('.basis-grid-line');
+    expect(await lines.count()).toBeGreaterThan(0);
+    expect(await lines.count()).toBeLessThanOrEqual(82);
+    const endpointsAreBounded = await lines.evaluateAll((elements) => elements.every((element) => {
+      const values = ['x1', 'x2', 'y1', 'y2'].map((attribute) => Number(element.getAttribute(attribute)));
+      return values.every((value) => Number.isFinite(value) && value >= 27.99 && value <= 732.01);
+    }));
+    expect(endpointsAreBounded).toBe(true);
+  }
+});
+
+test('rejects dependent directions as a coordinate basis', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Dependent pair' }).click();
+  await page.getByRole('switch', { name: 'Show change of basis' }).click();
+
+  await expect(page.getByText('These directions do not form a basis, so B-coordinates are undefined.')).toBeVisible();
+  await expect(page.locator('.basis-coordinate-overlay')).toHaveAttribute('aria-label', /do not form a basis/);
+  await expect(page.locator('.basis-coordinate-grid')).toHaveCount(0);
+});
+
 test('marks projection geometry that continues beyond the visible plane', async ({ page }) => {
   await page.goto('/?scene=1&ids=u1%2Cu2&u1=12%2C12&u2=1%2C0&projection=1');
 
@@ -168,10 +233,12 @@ test('keeps combination labels and colors tied to vector identity after removal'
 test('reset scene restores scene toggles and vector state', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('checkbox', { name: /Show standard basis/ }).check();
+  await page.getByRole('switch', { name: 'Show change of basis' }).click();
   await page.getByRole('button', { name: 'Hide u₁' }).click();
   await page.getByRole('button', { name: 'Reset scene' }).click();
 
   await expect(page.getByRole('checkbox', { name: /Show standard basis/ })).not.toBeChecked();
+  await expect(page.getByRole('switch', { name: 'Show change of basis' })).not.toBeChecked();
   await expect(page.getByRole('button', { name: 'Hide u₁' })).toBeVisible();
   await expect(page.locator('.vector-1 .vector-coordinate')).toContainText('(2, 1)');
 });
@@ -238,10 +305,13 @@ test('keeps the primary playground layout visually stable', async ({ page }, tes
   if (!viewport) throw new Error('A fixed viewport is required for visual regression testing');
   const screenshotHeight = testInfo.project.name === 'mobile' ? 2700 : 2000;
 
-  await expect(page).toHaveScreenshot('playground.png', {
+  await page.setViewportSize({ width: viewport.width, height: screenshotHeight });
+  const screenshot = await page.screenshot({
     animations: 'disabled',
     caret: 'hide',
-    clip: { x: 0, y: 0, width: viewport.width, height: screenshotHeight },
+    scale: 'css',
+  });
+  expect(screenshot).toMatchSnapshot('playground.png', {
     maxDiffPixelRatio: testInfo.project.name === 'mobile' ? 0.055 : 0.02,
   });
 });

@@ -24,6 +24,7 @@ test('expanded relationship controls have no detectable WCAG A or AA violations'
   await page.getByRole('button', { name: 'Add a vector' }).click();
   await page.getByRole('switch', { name: 'Show linear combination' }).click();
   await page.getByRole('switch', { name: 'Show dot product and projection' }).click();
+  await page.getByRole('switch', { name: 'Show change of basis' }).click();
   await page.getByRole('checkbox', { name: /Show standard basis/ }).check();
   await page.getByRole('banner').getByRole('button', { name: 'Switch to light theme' }).click();
 

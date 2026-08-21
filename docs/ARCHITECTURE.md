@@ -30,6 +30,7 @@ usePlaygroundState ── serializable vector + scene state
 - `numerical.ts`: finite checks, scale-aware approximate equality, clamp, tolerances.
 - `linear-independence.ts`: pair classification, rank in R², independence, dependence, scalar-multiple search.
 - `linear-combination.ts`: arbitrary finite combinations, a shared two-vector evaluation (`firstScaled`, `secondScaled`, `result`), and a stable 2-vector solve.
+- `change-of-basis.ts`: ordered-basis coordinate evaluation, component vectors, and target reconstruction.
 - `projection.ts`: dot product, angle, projection, and perpendicular rejection evaluation.
 - `span.ts`: rank-to-span interpretation (`zero`, `line`, `plane`).
 - `basis.ts`: basis checks and the two visible basis criteria.
@@ -50,9 +51,10 @@ Input and drag coordinates are finite and clamped to ±12 at the state boundary.
 - stable vector IDs, labels, coordinates, visibility, and lock state
 - coefficients `a` and `b`
 - independent stable-ID pair selections for linear combinations and directional projections
-- theme and scene toggles, including projection visibility
+- a stable-ID ordered coordinate basis and target-vector selection
+- theme and scene toggles, including projection and basis-grid visibility
 
-`usePlaygroundState` owns transitions. Visible vectors are the active mathematical set; hidden vectors remain saved but are excluded from analysis, span, combinations, and the legend. Pair selections retain stable identities while both vectors remain active and fall back deterministically to the first two active vectors when a selected vector is hidden or removed. The URL effect writes a versioned `scene=1` schema containing vector order, coordinates, pair selections, coefficients, visibility, locks, and visual toggles. Theme is a client preference and is intentionally not shared; no account or backend is involved.
+`usePlaygroundState` owns transitions. Visible vectors are the active mathematical set; hidden vectors remain saved but are excluded from analysis, span, combinations, and the legend. Pair selections retain stable identities while both vectors remain active and fall back deterministically to the first two active vectors when a selected vector is hidden or removed. When a third vector is added, it becomes the default coordinate target while the first two vectors remain the ordered basis. The URL effect writes a versioned `scene=1` schema containing vector order, coordinates, pair selections, coefficients, visibility, locks, and visual toggles. Theme is a client preference and is intentionally not shared; no account or backend is involved.
 
 ## SVG visualization
 
@@ -62,14 +64,15 @@ Rendering layers are ordered deliberately:
 
 1. plane background and grid
 2. span line or subtle full-plane overlay
-3. determinant/parallelogram area overlay
-4. optional dot-product/projection overlay
-5. standard basis
-6. optional linear-combination construction
-7. original vectors and accessible handles
-8. origin marker
+3. optional transformed basis-coordinate grid
+4. determinant/parallelogram area overlay
+5. optional dot-product/projection overlay
+6. standard basis
+7. optional linear-combination construction
+8. original vectors and accessible handles
+9. origin marker
 
-The combination construction consumes the same `LinearCombinationEvaluation` object as the control panel. The projection construction consumes one shared `ProjectionEvaluation` for its dot product, angle, projection vector, perpendicular rejection, and right-angle marker. Projection and drop segments are clipped against the visible plane rectangle, so wholly off-screen segments are omitted while intersecting segments end at their true boundary point. Off-canvas endpoints are explicitly marked and paired with a continuation label rather than silently disappearing. When exactly two vectors are active, a determinant overlay shows their parallelogram and `|det(u₁, u₂)|` as geometric area.
+The combination construction consumes the same `LinearCombinationEvaluation` object as the control panel. The basis-coordinate grid consumes one shared `BasisCoordinatesEvaluation`; it inverse-transforms the visible plane corners to derive the complete visible lattice-index range, draws clipped lines parallel to the ordered basis directions, and reconstructs the target from its two coordinate components. Very fine or ill-conditioned lattices are evenly sampled to a bounded DOM count and labeled as sampled. Invalid dependent pairs produce an explicit unavailable state instead of a misleading grid. The projection construction consumes one shared `ProjectionEvaluation` for its dot product, angle, projection vector, perpendicular rejection, and right-angle marker. Projection and drop segments are clipped against the visible plane rectangle, so wholly off-screen segments are omitted while intersecting segments end at their true boundary point. Off-canvas endpoints are explicitly marked and paired with a continuation label rather than silently disappearing. When exactly two vectors are active, a determinant overlay shows their parallelogram and `|det(u₁, u₂)|` as geometric area.
 
 SVG is appropriate for the current small scene and keeps labels, focus, and hit areas inspectable. A future R³ renderer can implement a parallel scene interface without changing the math or state model.
 

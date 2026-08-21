@@ -19,6 +19,7 @@
 7. **Production polish** — responsive layout, themes, keyboard/touch affordances, metadata, README, architecture/roadmap docs, unit/component/E2E coverage.
 8. **Explicit relationship pairs** — accessible stable-ID selectors independently choose combination inputs and projection source/target, with deterministic fallback and URL persistence.
 9. **Production accessibility and overflow hardening** — automated Axe checks cover default and expanded scenes, WCAG AA contrast tokens are enforced in both themes, and clipped projection geometry uses true segment clipping, edge markers, and explicit continuation labels.
+10. **Change of basis** — an ordered stable-ID basis and target selection produce deterministic basis coordinates, reconstruction, an in-place transformed lattice, invalid-basis guidance, URL persistence, and math/component/E2E coverage.
 
 ## Intentionally deferred
 
