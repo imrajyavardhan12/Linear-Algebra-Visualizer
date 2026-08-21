@@ -2,6 +2,7 @@
   "name": "linear-algebra-playground",
   "private": true,
   "version": "1.0.0",
+  "license": "MIT",
   "packageManager": "pnpm@11.20.0",
   "engines": {
     "node": ">=20.19.0"

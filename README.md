@@ -150,6 +150,10 @@ The application ships a restrictive browser CSP and self-hosted fonts, so it mak
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a change. Mathematical behavior belongs in pure, tested modules; React components should consume analysis results rather than reimplementing linear algebra.
 
+## License
+
+Released under the [MIT License](LICENSE).
+
 ## Roadmap
 
 See [docs/ROADMAP.md](docs/ROADMAP.md). The current priority is polishing the R² experience before adding advanced visual modules.
